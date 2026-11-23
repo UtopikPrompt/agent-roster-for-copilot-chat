@@ -8,7 +8,6 @@ argument-hint: "Provide the task description and acceptance criteria. Agent will
   route to appropriate subagent."
 user-invocable: true
 tools: [ vscode/askQuestions, agent, UtopikPrompt.agent-roster-for-copilot-chat/aroGetModelRecommendations, UtopikPrompt.agent-roster-for-copilot-chat/aroRecordModelOutcome, UtopikPrompt.agent-roster-for-copilot-chat/aroGetSkillProcedure ]
-model: ["GPT-6 Luna", "Claude Haiku 5.5"]
 agents:
   - CodeDomainAdvisor
   - CodeFrontendAdvisor

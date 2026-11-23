@@ -4,7 +4,6 @@ description: "Infrastructure/DevOps advisor for local LLM inference, deployment,
   IaC, security, Kubernetes, tooling, and CI selection. Returns a decision only."
 argument-hint: "Goal, environment, constraints, and Infra/DevOps routing rows
   supplied by Orchestrator."
-model: "Claude Haiku 5.5"
 user-invocable: false
 tools: []
 agents: []

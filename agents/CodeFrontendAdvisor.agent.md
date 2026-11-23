@@ -3,7 +3,6 @@ name: "CodeFrontendAdvisor"
 description: "Frontend selection advisor for Next.js, Vite/React, or shared
   design-system work. Returns a decision only; never implements or delegates."
 argument-hint: "Goal, stack signals, constraints, and frontend candidate names."
-model: "Claude Haiku 5.5"
 user-invocable: false
 tools: []
 agents: []
