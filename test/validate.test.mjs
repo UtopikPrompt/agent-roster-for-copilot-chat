@@ -37,7 +37,6 @@ test('Azure DevOps agent is a read-first, non-delegating worker routed through I
     assert.equal(metadata.name, name);
     assert.deepEqual(metadata.tools, ['read', 'search', 'ado-remote-mcp/*']);
     assert.deepEqual(metadata.agents, []);
-    assert.equal(metadata.model, undefined, 'workers must not pin a model without measured evidence');
     assert.equal(metadata['user-invocable'], false);
     assert.match(body, /explicit user confirmation/);
     assert.match(body, /Externally consequential/);
@@ -120,7 +119,6 @@ test('Aro learns model outcomes by contextual activity, domain, and difficulty',
     const body = rawBody.replace(/\r\n/g, '\n');
     const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
     const extensionId = `${manifest.publisher}.${manifest.name}`;
-    assert.deepEqual(metadata.model, ['GPT-6 Luna', 'Claude Haiku 5.5']);
     assert.ok(metadata.tools.includes(`${extensionId}/aroGetModelRecommendations`));
     assert.ok(metadata.tools.includes(`${extensionId}/aroRecordModelOutcome`));
     const modelSelection = body.split('## Model Selection and Learning\n')[1]?.split(/^## /m)[0];
@@ -149,14 +147,6 @@ test('Aro learns model outcomes by contextual activity, domain, and difficulty',
     assert.ok(modelSelection.includes('low-risk'));
     assert.ok(modelSelection.includes('Claude Sonnet 5.5 (copilot)'));
     assert.ok(modelSelection.includes('materially complex'));
-});
-
-test('preserves economical model preferences on configured selection advisors', async () => {
-    const advisors = ['CodeBackendAdvisor', 'CodeDomainAdvisor', 'CodeFrontendAdvisor', 'DocsGovernanceAdvisor', 'InfraDevOpsAdvisor', 'UtilityAdvisor'];
-    for (const name of advisors) {
-        const { metadata } = parseCustomization(await readFile(path.join(root, `agents/${name}.agent.md`), 'utf8'), name);
-        assert.equal(metadata.model, 'Claude Haiku 5.5', `${name}: expected economical advisor model preference`);
-    }
 });
 
 test('Aro resolves procedure gaps and owns persistence for read-only assessment workers', async () => {

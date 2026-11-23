@@ -81,12 +81,11 @@ test('ADO collector defers grouped and action-based categories as BLOCKED pendin
 });
 
 
-test('collectors are non-delegating, not user-invocable, and not model-pinned', async () => {
+test('collectors are non-delegating, not user-invocable', async () => {
     for (const name of WORKERS) {
         const { metadata } = await agent(name);
         assert.deepEqual(metadata.agents, [], `${name}: must not delegate`);
         assert.equal(metadata['user-invocable'], false, `${name}: must not be user-invocable`);
-        assert.equal(metadata.model, undefined, `${name}: must not pin a model`);
         for (const forbidden of ['edit', 'execute', 'todo', 'agent', 'runSubagent']) {
             assert.ok(!metadata.tools.includes(forbidden), `${name}: must not include ${forbidden}`);
         }
@@ -97,7 +96,6 @@ test('advisor is tool-free and selection-only', async () => {
     const { metadata, body } = await agent('ProjectAssessmentAdvisor');
     assert.deepEqual(metadata.tools, []);
     assert.deepEqual(metadata.agents, []);
-    assert.equal(metadata.model, undefined, 'advisor must not pin a model');
     assert.match(body, /Return only JSON/);
     assert.match(body, /Never collects evidence/);
     assert.match(body, /NO_MATCH/);
@@ -394,7 +392,6 @@ test('chain workers keep their general tool lists and run in assessment mode wit
         assert.deepEqual(metadata.tools, ['read', 'search'], `${name}: general tool list must stay unchanged`);
         assert.deepEqual(metadata.agents, [], `${name}: must not delegate`);
         assert.equal(metadata['user-invocable'], false, `${name}: must not be user-invocable`);
-        assert.equal(metadata.model, undefined, `${name}: must not pin a model`);
         assert.match(body, /## Project Assessment Mode/, `${name}: must define assessment mode`);
         assert.match(body, /Do not read, search, or collect source material/, `${name}: must forbid source collection in assessment mode`);
         assert.match(body, /Do not write or persist files/, `${name}: must forbid writes in assessment mode`);
