@@ -2,7 +2,7 @@
 
 ## Content Selection
 
-The initial migration reads the user-supplied prompt directory without modifying it. It retains all 49 agent definitions, their routing hierarchy and tool allowlists, and the existing model benchmark skill. Aro retains its ordered model preferences and task-aware per-call selection; the six configured selection advisors retain their economical model preference. Aro consults its profile-local model-learning tool before advisor and specialist calls and requests an eligible exact model argument when supported, independently of the chat model. Configured or fallback choices must remain eligible within the selected scope; if scope or a suitable model cannot be verified, Aro reports the limitation. Confirmed availability failures can trigger bounded re-queries with request-local exclusions, but uncertain side effects must not be repeated. Requested model IDs do not prove runtime resolution.
+The initial migration reads the user-supplied prompt directory without modifying it. At migration it retained 49 agent definitions (the roster has since grown; current counts are under Validation), their routing hierarchy and tool allowlists, and the existing model benchmark skill. Aro retains its ordered model preferences and task-aware per-call selection; the six advisors that pin `Claude Haiku 5.5` (CodeBackend, CodeDomain, CodeFrontend, DocsGovernance, InfraDevOps, and Utility) retain that economical preference. ProjectAssessmentAdvisor has no model pin and falls under Aro's per-call selection. Aro consults its profile-local model-learning tool before advisor and specialist calls and requests an eligible exact model argument when supported, independently of the chat model. Configured or fallback choices must remain eligible within the selected scope; if scope or a suitable model cannot be verified, Aro reports the limitation. Confirmed availability failures can trigger bounded re-queries with request-local exclusions, but uncertain side effects must not be repeated. Requested model IDs do not prove runtime resolution.
 
 The package excludes source Git metadata, Python caches, generated reports, historical improvement notes and client-editor settings. The separately maintained Microsoft Foundry skill bundle is not vendored: its dependencies, service assumptions and redistribution terms need an independent review. Install it separately when required.
 
@@ -30,6 +30,10 @@ Read-only analysis workers return complete findings and artifact content to Aro.
 
 The Git worker's embedded PR procedure no longer requires separately installed PR skills; available skills can enrich it. Existing direct invocation of that worker is preserved. Model benchmarking is explicitly manual-only; it is separate from task-aware model selection and never changes model preferences.
 
+## Project Assessment Collectors
+
+Project assessment collectors are read-only and never delegate. Four source collectors (SharePoint, Microsoft 365, Azure DevOps, and GitHub) have `tools: []`: they are BLOCKED until debug binds exact tool names and verifies read-only behavior. Candidate names are kept in each body as PENDING, not active. Only ProjectEvidenceLocalRepoCollector has tools bound (`read` and `search`), and Git metadata stays UNKNOWN because no read-only Git tool is bound. The WorkIQ server prefix, the grouped Azure DevOps tool schemas, and each MCP server's read-only mode are unverified. Any tool that is absent or refused must report BLOCKED, never a substitute. The Azure DevOps collector is distinct from InfraAzureDevOpsAgent, which remains read and write. Assessment report persistence is defined as a writer route (GovDocumentationSuiteGenerator) that runs only with explicit user save authorization and a confirmed non-roster target path, and it reports saved files only after read-back. This route is defined but not tested or exercised live; until a debug run reads back a saved file, report persistence as not performed.
+
 ## Source Layout
 
 - `agents/`: packaged custom agent definitions.
@@ -50,7 +54,7 @@ Run `npm test` and `npm run lint`, then `npm run vscode:prepublish` for the comb
 Before distribution, test the actual VSIX in a clean VS Code profile with Copilot enabled:
 
 1. Install the VSIX, reload if prompted, and open a fresh chat.
-2. Verify Aro and the Git worker in the agent picker. Verify all 50 definitions and 10 skills in Chat: Open Customizations, including hidden worker agents.
+2. Verify Aro and the Git worker in the agent picker. Verify all 57 definitions and 12 skills in Chat: Open Customizations, including hidden worker agents.
 3. Give Aro a small read-only task and verify it invokes the indexed worker rather than merely describing a delegation.
 4. Invoke `/markdown-mermaid-delivery` with a small documentation request. Verify the skill content loads from the installed extension.
 5. Give a frontend worker a scoped request through Orchestrator and verify the linked quality skill loads without a client-profile search.

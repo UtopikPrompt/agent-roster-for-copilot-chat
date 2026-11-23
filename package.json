@@ -11,7 +11,8 @@
         "onCommand:agentRoster.openModelInventory",
         "onView:agentRoster.modelLearning",
         "onLanguageModelTool:aroGetModelRecommendations",
-        "onLanguageModelTool:aroRecordModelOutcome"
+        "onLanguageModelTool:aroRecordModelOutcome",
+        "onLanguageModelTool:aroGetSkillProcedure"
     ],
     "license": "PolyForm-Noncommercial-1.0.0",
     "engines": {
@@ -299,6 +300,34 @@
                     ],
                     "additionalProperties": false
                 }
+            },
+            {
+                "name": "aroGetSkillProcedure",
+                "displayName": "Get Aro bundled skill procedure",
+                "toolReferenceName": "aroGetSkillProcedure",
+                "canBeReferencedInPrompt": true,
+                "userDescription": "Return the bundled text of an Aro project-assessment procedure in bounded parts.",
+                "modelDescription": "Return one bounded part of a bundled project-assessment procedure. Accepts only the listed skill names; any other value is rejected. The result states the part number and total; call again with the next part until the final part, then concatenate the verbatim segments in order for Aro to pass to a worker. Does not read arbitrary files, search, or grant tools.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "skill": {
+                            "type": "string",
+                            "enum": [
+                                "project-evidence-ingestion",
+                                "project-assessment"
+                            ]
+                        },
+                        "part": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    "required": [
+                        "skill"
+                    ],
+                    "additionalProperties": false
+                }
             }
         ],
         "chatAgents": [
@@ -447,6 +476,27 @@
                 "path": "./agents/MultiLanguageBuilder.agent.md"
             },
             {
+                "path": "./agents/ProjectAssessmentAdvisor.agent.md"
+            },
+            {
+                "path": "./agents/ProjectAssessmentExpert.agent.md"
+            },
+            {
+                "path": "./agents/ProjectEvidenceAzureDevOpsCollector.agent.md"
+            },
+            {
+                "path": "./agents/ProjectEvidenceGitHubCollector.agent.md"
+            },
+            {
+                "path": "./agents/ProjectEvidenceLocalRepoCollector.agent.md"
+            },
+            {
+                "path": "./agents/ProjectEvidenceM365Collector.agent.md"
+            },
+            {
+                "path": "./agents/ProjectEvidenceSharePointCollector.agent.md"
+            },
+            {
                 "path": "./agents/Aro.agent.md"
             },
             {
@@ -474,6 +524,12 @@
             },
             {
                 "path": "./skills/progressive-investigation/SKILL.md"
+            },
+            {
+                "path": "./skills/project-assessment/SKILL.md"
+            },
+            {
+                "path": "./skills/project-evidence-ingestion/SKILL.md"
             },
             {
                 "path": "./skills/release-contract-preflight/SKILL.md"

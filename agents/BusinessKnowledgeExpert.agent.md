@@ -184,6 +184,14 @@ Professional means reproducible evidence and explicit limits, not claimed certai
   integrator maintain the single package-level plan/resume item in README. Do not
   append a separate "Next action" to each generated report.
 
+## Project Assessment Mode
+Applies only when Aro dispatches this worker as a step of a project assessment with its supplied package.
+- Consume only the supplied package: P5 findings, normalized evidence records, and earlier chain outputs. Do not read, search, or collect source material, even though `read` and `search` remain bound for other requests.
+- Return gaps and missing inputs to Aro with the affected IDs. Do not invent evidence to close them.
+- Do not write or persist files. Return complete content in the response.
+- Apply the project-assessment procedure text Aro supplies: scalability and workload profile, finding quality, and recommendation standard.
+- Keep the role procedures above. This mode narrows evidence intake and output location only.
+
 ## Execution and Existing Edit Protection
 - Use targeted read/search and available editor diagnostics only. Do not execute,
   browse, edit or delegate; give exact checks for Orchestrator to commission separately.

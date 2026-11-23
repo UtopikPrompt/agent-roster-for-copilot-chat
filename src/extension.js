@@ -1,5 +1,7 @@
 const vscode = require('vscode');
 const { randomBytes } = require('node:crypto');
+const { readFile } = require('node:fs/promises');
+const path = require('node:path');
 const { effectiveModelScope, getInventorySummary, getManagedPricing, hasSelectedLocalModel, isCopilotCloudVendor, isModelSelected, modelKey, modelKind, selectModels } = require('./model-pricing');
 const {
     ACTIVITIES,
@@ -73,13 +75,13 @@ function getManualSelections(context) {
     return Array.isArray(stored) ? stored.map(selection => selection?.domain === 'github-workflow'
         ? { ...selection, domain: 'documentation-governance' }
         : selection).filter(selection => selection
-        && ACTIVITIES.includes(selection.activity)
-        && DOMAINS.includes(selection.domain)
-        && TASK_CATEGORIES.includes(selection.difficulty)
-        && typeof selection.modelId === 'string'
-        && selection.modelId.length > 0
-        && typeof selection.vendor === 'string'
-        && selection.vendor.length > 0) : [];
+            && ACTIVITIES.includes(selection.activity)
+            && DOMAINS.includes(selection.domain)
+            && TASK_CATEGORIES.includes(selection.difficulty)
+            && typeof selection.modelId === 'string'
+            && selection.modelId.length > 0
+            && typeof selection.vendor === 'string'
+            && selection.vendor.length > 0) : [];
 }
 
 function getManualSelection(selections, context) {
@@ -90,7 +92,7 @@ function getManualSelection(selections, context) {
 
 function enqueueInventoryUpdate(update) {
     const result = inventoryUpdates.then(update);
-    inventoryUpdates = result.catch(() => {});
+    inventoryUpdates = result.catch(() => { });
     return result;
 }
 
@@ -484,6 +486,7 @@ async function applyProviderAvailabilityChange(context, message, models) {
 
 function activate(context) {
     context.subscriptions.push(registerModelLearningTools(context));
+    context.subscriptions.push(registerSkillProcedureTool(context));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.openModelLearning', () => openModelLearning(context)));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.openModelInventory', scope => openModelInventory(context, scope)));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.changeModelScope', () => changeModelScope(context)));
@@ -575,6 +578,51 @@ function registerModelLearningTools(context) {
             recordTool.dispose();
         }
     };
+}
+
+// Hardcoded allowlist: the tool takes only a name from this list, never a path, so input cannot traverse the filesystem.
+const BUNDLED_SKILLS = Object.freeze(['project-evidence-ingestion', 'project-assessment']);
+
+// The host spills large tool results to a file the caller cannot read, so each call returns one bounded part.
+const SKILL_PART_MAX_CHARS = 4000;
+
+function splitSkillText(text) {
+    const parts = [];
+    let current = '';
+    for (let line of text.match(/[^\n]*\n|[^\n]+/g) ?? []) {
+        for (; line.length > SKILL_PART_MAX_CHARS; line = line.slice(SKILL_PART_MAX_CHARS)) {
+            if (current) parts.push(current);
+            current = '';
+            parts.push(line.slice(0, SKILL_PART_MAX_CHARS));
+        }
+        if (current && current.length + line.length > SKILL_PART_MAX_CHARS) {
+            parts.push(current);
+            current = '';
+        }
+        current += line;
+    }
+    if (current) parts.push(current);
+    return parts;
+}
+
+function registerSkillProcedureTool(context) {
+    return vscode.lm.registerTool('aroGetSkillProcedure', {
+        prepareInvocation({ input }) {
+            return { invocationMessage: `Reading bundled procedure ${input?.skill}${input?.part ? ` part ${input.part}` : ''}` };
+        },
+        async invoke({ input }) {
+            const skill = input?.skill;
+            if (!BUNDLED_SKILLS.includes(skill)) throw new Error('Unknown bundled skill.');
+            const part = input.part ?? 1;
+            const text = await readFile(path.join(context.extensionPath, 'skills', skill, 'SKILL.md'), 'utf8');
+            const parts = splitSkillText(text);
+            if (!Number.isInteger(part) || part < 1 || part > parts.length) throw new Error(`Invalid part; ${skill} has parts 1 to ${parts.length}.`);
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(`skill=${skill} part=${part} of ${parts.length}${part < parts.length ? `; call again with part=${part + 1}` : '; final part'}. The next text block is the verbatim procedure segment; concatenate all parts in order.`),
+                new vscode.LanguageModelTextPart(parts[part - 1])
+            ]);
+        }
+    });
 }
 
 const modelLearningPanels = new WeakMap();

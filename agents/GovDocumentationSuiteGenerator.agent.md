@@ -167,6 +167,17 @@ When this workflow is relevant, read and follow the bundled [specification-hando
   File existence and link checks are not proof that roadmap-stage exit criteria or executable
   acceptance tests passed. Keep command checks unrun unless supplied as evidence.
 
+## Assessment Report Persistence
+
+Use only when the user has explicitly authorized saving, and Aro dispatches a confirmed persistence request for a project assessment report, with the complete report content and a confirmed non-roster target root and write paths. Without explicit save authorization, write nothing.
+
+- Refuse a target root that is the agent-roster repository: a root whose `package.json` declares `chatAgents` or `chatSkills`, or that contains the roster's `agents/` and `skills/` directories together with `scripts/validate.mjs`. Report the refusal to Aro and write nothing.
+- Write only the confirmed paths, normally under `docs/project-assessment/<date>-<slug>/` in the confirmed target root. Do not modify any other file.
+- Preserve existing files. If a path exists with different content, do not overwrite it. Report the conflict with both paths and skip that file.
+- Read back each written file and compare it with the content received. Report the exact version and any mismatch.
+- If this session has no write tool, write nothing, report persistence as untested and not performed, and return the content to Aro.
+- Independent review of the persisted version is not part of this route. Report it as not performed.
+
 ## Core Responsibilities
 - **Repository Boundaries**: Follow existing paths/templates rather than imposing examples below. Only the user or documented human authority accepts a decision; preserve proposal/accepted states and documentation-only scope.
 - **Architecture Record Export**: Preserve/cross-reference supplied records; substantive ADR/RFC authorship belongs to GovArchitectureRecordsExpert

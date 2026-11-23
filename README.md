@@ -6,7 +6,7 @@
 	<img src="assets/banner.jpg" alt="Aro, a robot character surrounded by connected specialist nodes" width="640">
 </p>
 
-This extension adds 50 focused helpers to GitHub Copilot Chat. They can help explain a project, solve coding problems, plan changes, improve documentation, and more. Aro is the starting point: describe your task in your own words, and it brings in a helper suited to the work.
+This extension adds 57 focused helpers to GitHub Copilot Chat: 48 specialists, 8 advisors, and Aro. They can help explain a project, solve coding problems, plan changes, improve documentation, and more. Aro is the starting point: describe your task in your own words, and it brings in a helper suited to the work.
 
 ## Get Started
 
@@ -29,7 +29,7 @@ Aro is the starting point for the roster. Describe what you need, and Aro consul
 Advisors help Aro choose the right specialist for a task. They select a route; the selected agent does the work.
 
 <details>
-<summary>Browse all 7 advisors</summary>
+<summary>Browse all 8 advisors</summary>
 
 | Advisor | Purpose |
 | --- | --- |
@@ -39,16 +39,17 @@ Advisors help Aro choose the right specialist for a task. They select a route; t
 | [CodeFrontendAdvisor](agents/CodeFrontendAdvisor.agent.md) | Select frontend specialists for Next.js, Vite/React, or design systems. |
 | [DocsGovernanceAdvisor](agents/DocsGovernanceAdvisor.agent.md) | Select documentation and governance specialists for ADRs, GitHub, and research. |
 | [InfraDevOpsAdvisor](agents/InfraDevOpsAdvisor.agent.md) | Select DevOps specialists for infrastructure, deployment, and security work. |
+| [ProjectAssessmentAdvisor](agents/ProjectAssessmentAdvisor.agent.md) | Select one read-only evidence collector or the cross-source analysis worker for a project assessment. |
 | [UtilityAdvisor](agents/UtilityAdvisor.agent.md) | Select specialists for agent diagnostics, brainstorming, and checkpoints. |
 
 </details>
 
 ## Agents
 
-The roster includes 42 specialist agents, selected by Aro with help from the advisors above.
+The roster includes 48 specialist agents, selected by Aro with help from the advisors above.
 
 <details>
-<summary>Browse all 42 agents</summary>
+<summary>Browse all 57 agents</summary>
 
 | Agent | Purpose |
 | --- | --- |
@@ -94,15 +95,21 @@ The roster includes 42 specialist agents, selected by Aro with help from the adv
 | [InfraSecurityAuthAgent](agents/InfraSecurityAuthAgent.agent.md) | Design and diagnose authentication, authorization, RBAC, and secrets. |
 | [InfraTestInfrastructureGenerator](agents/InfraTestInfrastructureGenerator.agent.md) | Generate test suites, fixtures, mocks, coverage, and CI gates. |
 | [MultiLanguageBuilder](agents/MultiLanguageBuilder.agent.md) | Coordinate Python, Node.js, and TypeScript builds and dependencies. |
+| [ProjectAssessmentExpert](agents/ProjectAssessmentExpert.agent.md) | Analyze supplied evidence records across documentation, code, architecture, requirements, and delivery, with gaps visible. |
+| [ProjectEvidenceAzureDevOpsCollector](agents/ProjectEvidenceAzureDevOpsCollector.agent.md) | Collect read-only Azure DevOps evidence for projects, teams, and code, wiki, work item, or commit search. No tools are bound until debug verification; grouped categories are BLOCKED pending debug. |
+| [ProjectEvidenceGitHubCollector](agents/ProjectEvidenceGitHubCollector.agent.md) | Collect read-only GitHub code scanning alerts for a project assessment. No tools are bound until debug verification; other GitHub categories are BLOCKED pending debug. |
+| [ProjectEvidenceLocalRepoCollector](agents/ProjectEvidenceLocalRepoCollector.agent.md) | Collect read-only local target-repository evidence using read and search only. |
+| [ProjectEvidenceM365Collector](agents/ProjectEvidenceM365Collector.agent.md) | Teams, Planner, and OneDrive evidence collector with no tools bound. BLOCKED until distinct read tools are debug-bound and preauthorized. |
+| [ProjectEvidenceSharePointCollector](agents/ProjectEvidenceSharePointCollector.agent.md) | Collect read-only SharePoint documents, libraries, lists, and site metadata. No tools are bound: four WorkIQ read tools are PENDING. BLOCKED until the binding and preauthorization are debug-verified. |
 
 </details>
 
 ## Skills
 
-The extension also includes 10 reusable guides for common tasks, such as investigating a problem, improving an interface, preparing a release, or writing technical documents.
+The extension also includes 12 reusable guides for common tasks, such as investigating a problem, improving an interface, preparing a release, or writing technical documents.
 
 <details>
-<summary>Browse all 10 skills</summary>
+<summary>Browse all 12 skills</summary>
 
 | Skill | Area | Use it for |
 | --- | --- | --- |
@@ -113,6 +120,8 @@ The extension also includes 10 reusable guides for common tasks, such as investi
 | [identity-failure-isolation](skills/identity-failure-isolation/SKILL.md) | Security | CI authentication and authorization diagnosis using sanitized OIDC, GitHub App, tenant, and secret-reference evidence. |
 | [markdown-mermaid-delivery](skills/markdown-mermaid-delivery/SKILL.md) | Documentation | Native Markdown and readable Mermaid diagrams with honest rendering status. |
 | [progressive-investigation](skills/progressive-investigation/SKILL.md) | Investigation | Scoped debugging and review from a concrete anchor, falsifiable hypothesis, and cheapest discriminating check. |
+| [project-assessment](skills/project-assessment/SKILL.md) | Assessment | Cross-source project assessment procedure with scope, dimensions, evidence-linked analysis, and visible gaps. |
+| [project-evidence-ingestion](skills/project-evidence-ingestion/SKILL.md) | Assessment | Read-only evidence record contract: provenance, identity confidence, discovery stages, dynamic budgets, coverage denominators, sufficiency states, blocked results, and redaction. |
 | [release-contract-preflight](skills/release-contract-preflight/SKILL.md) | Release | Artifact provenance, overlays, storage ownership, rollback, and stage-specific authorization. |
 | [secure-development-bootstrap](skills/secure-development-bootstrap/SKILL.md) | Environment | Development setup across local hosts, SSH, containers, and Codespaces, including safe secret delivery. |
 | [specification-handoff](skills/specification-handoff/SKILL.md) | Planning | Turning approved specifications into portable implementation handoffs with requirements, acceptance criteria, and evidence. |

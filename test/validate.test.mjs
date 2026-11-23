@@ -28,7 +28,7 @@ test('resolves portable assets without permitting package traversal', () => {
 });
 
 test('validates the complete council and all extracted workflow consumers', async () => {
-    assert.deepEqual(await validate(), { agents: 50, skills: 10 });
+    assert.deepEqual(await validate(), { agents: 57, skills: 12 });
 });
 
 test('Azure DevOps agent is a read-first, non-delegating worker routed through InfraDevOpsAdvisor', async () => {
@@ -79,7 +79,7 @@ test('Azure DevOps agent is a read-first, non-delegating worker routed through I
 
     const aro = parseCustomization(await readFile(path.join(root, 'agents/Aro.agent.md'), 'utf8'), 'Aro');
     assert.ok(aro.metadata.agents.includes(name));
-    assert.match(aro.body, /\| Azure DevOps work items, Azure Repos or pull requests, and Azure DevOps wiki through the Azure DevOps MCP \| InfraAzureDevOpsAgent \| InfraDevOpsAdvisor \|/);
+    assert.match(aro.body, /\| Azure DevOps operations or changes \(work items, Azure Repos or pull requests, pipelines, wiki\) through the Azure DevOps MCP; not project assessment evidence \| InfraAzureDevOpsAgent \| InfraDevOpsAdvisor \|/);
 
     const advisor = await readFile(path.join(root, 'agents/InfraDevOpsAdvisor.agent.md'), 'utf8');
     assert.match(advisor, /Azure DevOps work items.*-> `InfraAzureDevOpsAgent`/);
@@ -449,18 +449,18 @@ test('sidebar quick controls and status follow saved model policy and outcomes',
     let refreshes = 0;
     let failDiscovery = false;
     const vscode = {
-        EventEmitter: class { constructor() { this.event = () => ({ dispose() {} }); } fire() { refreshes += 1; } dispose() {} },
+        EventEmitter: class { constructor() { this.event = () => ({ dispose() { } }); } fire() { refreshes += 1; } dispose() { } },
         TreeItem: class { constructor(label) { this.label = label; } },
         TreeItemCollapsibleState: { None: 0 },
         ThemeIcon: class { constructor(id) { this.id = id; } },
         lm: {
-            registerTool: (name, tool) => { tools.set(name, tool); return { dispose() {} }; },
+            registerTool: (name, tool) => { tools.set(name, tool); return { dispose() { } }; },
             selectChatModels: async () => { if (failDiscovery) throw new Error('provider unavailable'); return models; }
         },
-        workspace: { getConfiguration: () => ({ get: () => [], inspect: () => undefined }), onDidChangeConfiguration: () => ({ dispose() {} }) },
-        commands: { registerCommand: (name, callback) => { commands.set(name, callback); return { dispose() {} }; } },
+        workspace: { getConfiguration: () => ({ get: () => [], inspect: () => undefined }), onDidChangeConfiguration: () => ({ dispose() { } }) },
+        commands: { registerCommand: (name, callback) => { commands.set(name, callback); return { dispose() { } }; } },
         window: {
-            registerTreeDataProvider: (name, provider) => { sidebar = provider; return { dispose() {} }; },
+            registerTreeDataProvider: (name, provider) => { sidebar = provider; return { dispose() { } }; },
             showQuickPick: async items => { choices = items; return items.find(item => item.value === nextChoice); },
             showErrorMessage: message => { throw new Error(message); }
         },
@@ -497,9 +497,11 @@ test('sidebar quick controls and status follow saved model policy and outcomes',
     nextChoice = 'local-first';
     await commands.get('agentRoster.changeModelPriority')();
     assert.equal(state.get('agentRoster.modelLearning.inventory.v1').priority, 'local-first');
-    await tools.get('aroRecordModelOutcome').invoke({ input: {
-        role: 'coding', taskCategory: 'simple', modelId: 'local', outcome: 'success', evidenceCode: 'acceptance_passed'
-    } });
+    await tools.get('aroRecordModelOutcome').invoke({
+        input: {
+            role: 'coding', taskCategory: 'simple', modelId: 'local', outcome: 'success', evidenceCode: 'acceptance_passed'
+        }
+    });
     rows = await sidebar.getChildren();
     assert.equal(row('Priority').description, 'Local first');
     assert.equal(row('Outcomes').description, '1');
@@ -539,23 +541,23 @@ test('sidebar scope changes refresh a dashboard already loading', { timeout: 300
                 }
             }
         },
-        onDidDispose() {}
+        onDidDispose() { }
     };
     const vscode = {
-        EventEmitter: class { constructor() { this.event = () => ({ dispose() {} }); } fire() {} dispose() {} },
+        EventEmitter: class { constructor() { this.event = () => ({ dispose() { } }); } fire() { } dispose() { } },
         TreeItem: class { constructor(label) { this.label = label; } },
-        TreeItemCollapsibleState: { None: 0 }, ThemeIcon: class {},
+        TreeItemCollapsibleState: { None: 0 }, ThemeIcon: class { },
         lm: {
-            registerTool: () => ({ dispose() {} }),
+            registerTool: () => ({ dispose() { } }),
             selectChatModels: async () => {
                 if (delayDiscovery) { delayDiscovery = false; await discoveryGate; }
                 return models;
             }
         },
-        workspace: { getConfiguration: () => ({ get: () => [], inspect: () => undefined }), onDidChangeConfiguration: () => ({ dispose() {} }) },
-        commands: { registerCommand: (name, callback) => { commands.set(name, callback); return { dispose() {} }; } },
+        workspace: { getConfiguration: () => ({ get: () => [], inspect: () => undefined }), onDidChangeConfiguration: () => ({ dispose() { } }) },
+        commands: { registerCommand: (name, callback) => { commands.set(name, callback); return { dispose() { } }; } },
         window: {
-            registerTreeDataProvider: () => ({ dispose() {} }), createWebviewPanel: () => panel,
+            registerTreeDataProvider: () => ({ dispose() { } }), createWebviewPanel: () => panel,
             showQuickPick: async choices => choices.find(choice => choice.value === 'local'),
             showErrorMessage: message => { throw new Error(message); }
         },
@@ -578,6 +580,103 @@ test('sidebar scope changes refresh a dashboard already loading', { timeout: 300
     releaseDiscovery();
     await updated;
     assert.deepEqual(messages, ['both', 'local']);
+});
+
+async function loadSkillProcedureTools() {
+    const tools = new Map();
+    const vscode = {
+        EventEmitter: class { constructor() { this.event = () => ({ dispose() { } }); } fire() { } dispose() { } },
+        TreeItem: class { constructor(label) { this.label = label; } },
+        TreeItemCollapsibleState: { None: 0 },
+        ThemeIcon: class { constructor(id) { this.id = id; } },
+        lm: {
+            registerTool: (name, tool) => { tools.set(name, tool); return { dispose() { } }; },
+            selectChatModels: async () => []
+        },
+        workspace: { getConfiguration: () => ({ get: () => [], inspect: () => undefined }), onDidChangeConfiguration: () => ({ dispose() { } }) },
+        commands: { registerCommand: () => ({ dispose() { } }) },
+        window: {
+            registerTreeDataProvider: () => ({ dispose() { } }),
+            showQuickPick: async () => undefined,
+            showErrorMessage: message => { throw new Error(message); }
+        },
+        LanguageModelTextPart: class { constructor(value) { this.value = value; } },
+        LanguageModelToolResult: class { constructor(content) { this.content = content; } }
+    };
+    const localRequire = createRequire(path.join(root, 'src/extension.js'));
+    const module = { exports: {} };
+    vm.runInNewContext(await readFile(path.join(root, 'src/extension.js'), 'utf8'), {
+        module, exports: module.exports,
+        require: name => name === 'vscode' ? vscode : localRequire(name), setTimeout, clearTimeout
+    });
+    module.exports.activate({
+        subscriptions: [], extensionPath: root,
+        globalState: { get: () => undefined, update: async () => { } }
+    });
+    return tools;
+}
+
+test('bundled skill procedure tool is contributed with a two-name schema and no path input', async () => {
+    const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+    assert.ok(manifest.activationEvents.includes('onLanguageModelTool:aroGetSkillProcedure'));
+    const tool = manifest.contributes.languageModelTools.find(entry => entry.name === 'aroGetSkillProcedure');
+    assert.ok(tool, 'aroGetSkillProcedure must be contributed');
+    assert.equal(tool.toolReferenceName, 'aroGetSkillProcedure');
+    assert.deepEqual(tool.inputSchema, {
+        type: 'object',
+        properties: {
+            skill: { type: 'string', enum: ['project-evidence-ingestion', 'project-assessment'] },
+            part: { type: 'integer', minimum: 1 }
+        },
+        required: ['skill'],
+        additionalProperties: false
+    });
+    const source = await readFile(path.join(root, 'src/extension.js'), 'utf8');
+    assert.match(source, /lm\.registerTool\('aroGetSkillProcedure'/);
+    assert.match(source, /context\.subscriptions\.push\(registerSkillProcedureTool\(context\)\)/);
+    const tools = await loadSkillProcedureTools();
+    assert.ok(tools.has('aroGetSkillProcedure'), 'activation must register the tool');
+});
+
+test('bundled skill procedure tool returns bounded parts that reassemble each allowlisted skill verbatim', async () => {
+    const tool = (await loadSkillProcedureTools()).get('aroGetSkillProcedure');
+    for (const skill of ['project-evidence-ingestion', 'project-assessment']) {
+        const expected = await readFile(path.join(root, 'skills', skill, 'SKILL.md'), 'utf8');
+        let assembled = '';
+        let total = 1;
+        for (let part = 1; part <= total; part++) {
+            const result = await tool.invoke({ input: part === 1 ? { skill } : { skill, part } });
+            assert.equal(result.content.length, 2);
+            const status = result.content[0].value;
+            total = Number(/part=\d+ of (\d+)/.exec(status)[1]);
+            assert.match(status, new RegExp(`part=${part} of ${total}`));
+            assert.ok(result.content[1].value.length <= 4000, `${skill} part ${part} must stay bounded`);
+            assembled += result.content[1].value;
+        }
+        assert.ok(total > 1, `${skill} must be split into several parts`);
+        assert.equal(assembled, expected, `${skill} must reassemble verbatim`);
+    }
+});
+
+test('bundled skill procedure tool rejects out-of-range or non-integer parts', async () => {
+    const tool = (await loadSkillProcedureTools()).get('aroGetSkillProcedure');
+    for (const part of [0, -1, 1.5, '1', 999]) {
+        await assert.rejects(tool.invoke({ input: { skill: 'project-evidence-ingestion', part } }), /Invalid part/, String(part));
+    }
+});
+
+test('bundled skill procedure tool rejects names outside the allowlist and path-like values', async () => {
+    const tool = (await loadSkillProcedureTools()).get('aroGetSkillProcedure');
+    const rejected = [
+        undefined, {}, { skill: '' }, { skill: 'project-assessment ' }, { skill: 'Project-Assessment' },
+        { skill: 'project-evidence-ingestion/../project-assessment' }, { skill: '../../package.json' },
+        { skill: '..\\..\\package.json' }, { skill: 'skills/project-assessment/SKILL.md' },
+        { skill: path.join(root, 'package.json') }, { skill: 'constructor' }, { skill: '__proto__' },
+        { skill: ['project-assessment'] }, { skill: 'AroGetSkillProcedure' }
+    ];
+    for (const input of rejected) {
+        await assert.rejects(tool.invoke({ input }), /Unknown bundled skill/, JSON.stringify(input));
+    }
 });
 
 test('inventory changes persist and affect dashboard and recommendation tool', async () => {
@@ -604,18 +703,18 @@ test('inventory changes persist and affect dashboard and recommendation tool', a
     let catalog = null;
     let quickPickChoices = [];
     const vscode = {
-        EventEmitter: class { constructor() { this.event = () => ({ dispose() {} }); } fire() {} dispose() {} },
+        EventEmitter: class { constructor() { this.event = () => ({ dispose() { } }); } fire() { } dispose() { } },
         TreeItem: class { constructor(label) { this.label = label; } },
         TreeItemCollapsibleState: { None: 0 },
         ThemeIcon: class { constructor(id) { this.id = id; } },
         lm: {
-            registerTool: (name, tool) => { tools.set(name, tool); return { dispose() {} }; },
+            registerTool: (name, tool) => { tools.set(name, tool); return { dispose() { } }; },
             selectChatModels: async () => models
         },
-        workspace: { getConfiguration: () => ({ get: () => [], inspect: () => undefined }), onDidChangeConfiguration: () => ({ dispose() {} }) },
-        commands: { registerCommand: (name, callback) => { commands.set(name, callback); return { dispose() {} }; } },
+        workspace: { getConfiguration: () => ({ get: () => [], inspect: () => undefined }), onDidChangeConfiguration: () => ({ dispose() { } }) },
+        commands: { registerCommand: (name, callback) => { commands.set(name, callback); return { dispose() { } }; } },
         window: {
-            registerTreeDataProvider: () => ({ dispose() {} }),
+            registerTreeDataProvider: () => ({ dispose() { } }),
             showQuickPick: async choices => {
                 quickPickChoices = choices;
                 return choices.find(choice => choice.modelId === 'cloud');
@@ -632,8 +731,8 @@ test('inventory changes persist and affect dashboard and recommendation tool', a
                             if (['learningDashboard', 'learningDashboardError'].includes(message.type)) created.resolve?.(message);
                         }
                     },
-                    reveal() {},
-                    onDidDispose() {}
+                    reveal() { },
+                    onDidDispose() { }
                 };
                 if (title === 'Aro Model Inventory') inventoryPanel = created;
                 else panel = created;
@@ -687,9 +786,11 @@ test('inventory changes persist and affect dashboard and recommendation tool', a
     const migratedPin = dashboard.dashboard.find(row => row.activity === 'operate'
         && row.domain === 'documentation-governance' && row.difficulty === 'standard');
     assert.equal(migratedPin.manualSelection.modelId, 'cloud');
-    const migratedPinResult = await tools.get('aroGetModelRecommendations').invoke({ input: {
-        activity: 'operate', domain: 'documentation-governance', difficulty: 'standard'
-    } });
+    const migratedPinResult = await tools.get('aroGetModelRecommendations').invoke({
+        input: {
+            activity: 'operate', domain: 'documentation-governance', difficulty: 'standard'
+        }
+    });
     assert.equal(JSON.parse(migratedPinResult.content[0].value).selectionMode, 'manual');
     for (const vendor of ['copilot', 'copilotcli']) {
         inventoryPanel.posted.length = 0;
@@ -723,9 +824,11 @@ test('inventory changes persist and affect dashboard and recommendation tool', a
     const pinnedRow = dashboard.dashboard.find(row => row.activity === 'implement' && row.domain === 'coding' && row.difficulty === 'simple');
     assert.equal(pinnedRow.manualSelection.modelId, 'cloud');
     assert.equal(pinnedRow.selectionMode, 'manual');
-    const contextualManualResult = await tools.get('aroGetModelRecommendations').invoke({ input: {
-        activity: 'implement', domain: 'coding', difficulty: 'simple'
-    } });
+    const contextualManualResult = await tools.get('aroGetModelRecommendations').invoke({
+        input: {
+            activity: 'implement', domain: 'coding', difficulty: 'simple'
+        }
+    });
     assert.equal(JSON.parse(contextualManualResult.content[0].value).selectionMode, 'manual');
     assert.equal(JSON.parse(contextualManualResult.content[0].value).recommendedModelId, 'cloud');
     response = nextDashboard();
@@ -767,16 +870,20 @@ test('inventory changes persist and affect dashboard and recommendation tool', a
     const advisorFallback = await tools.get('aroGetModelRecommendations').invoke({ input: { role: 'advisor', taskCategory: 'simple', excludedProviders: ['ollama'] } });
     assert.equal(JSON.parse(advisorFallback.content[0].value).recommendedModelId, 'cloud');
     assert.equal(state.has('agentRoster.modelLearning.scorecard.v1'), false);
-    const contextualResult = await tools.get('aroGetModelRecommendations').invoke({ input: {
-        activity: 'advise', domain: 'coding', difficulty: 'standard'
-    } });
+    const contextualResult = await tools.get('aroGetModelRecommendations').invoke({
+        input: {
+            activity: 'advise', domain: 'coding', difficulty: 'standard'
+        }
+    });
     const contextualRecommendation = JSON.parse(contextualResult.content[0].value);
     assert.match(contextualRecommendation.callId, /^[0-9a-f]{32}$/);
-    const contextualOutcome = await tools.get('aroRecordModelOutcome').invoke({ input: {
-        activity: 'advise', domain: 'coding', difficulty: 'standard', agent: 'CodeDomainAdvisor',
-        callId: contextualRecommendation.callId, modelId: 'local', outcome: 'success', evidenceCode: 'acceptance_passed',
-        metrics: { durationMs: 900, costUsd: 0.01 }
-    } });
+    const contextualOutcome = await tools.get('aroRecordModelOutcome').invoke({
+        input: {
+            activity: 'advise', domain: 'coding', difficulty: 'standard', agent: 'CodeDomainAdvisor',
+            callId: contextualRecommendation.callId, modelId: 'local', outcome: 'success', evidenceCode: 'acceptance_passed',
+            metrics: { durationMs: 900, costUsd: 0.01 }
+        }
+    });
     assert.equal(JSON.parse(contextualOutcome.content[0].value).activity, 'advise');
     assert.equal(state.get('agentRoster.modelLearning.scorecard.v1').records.at(-1).metrics.durationMs, 900);
     assert.equal(state.get('agentRoster.modelLearning.scorecard.v1').records.at(-1).callId, contextualRecommendation.callId);
@@ -855,9 +962,11 @@ test('inventory changes persist and affect dashboard and recommendation tool', a
     assert.ok(compact.candidates.some(candidate => candidate.id === compact.recommendedModelId));
     assert.ok(Buffer.byteLength(compactResult.content[0].value) < 3500);
     await catalogChange({ type: 'setModelSelected', id: 'cli', vendor: 'copilotcli', selected: true });
-    const fallbackResult = await tools.get('aroGetModelRecommendations').invoke({ input: {
-        role: 'coding', taskCategory: 'simple', excludedProviders: ['copilot']
-    } });
+    const fallbackResult = await tools.get('aroGetModelRecommendations').invoke({
+        input: {
+            role: 'coding', taskCategory: 'simple', excludedProviders: ['copilot']
+        }
+    });
     const fallback = JSON.parse(fallbackResult.content[0].value);
     assert.equal(fallback.modelScope, 'cloud');
     assert.equal(fallback.recommendedModelId, 'cli');
@@ -865,9 +974,11 @@ test('inventory changes persist and affect dashboard and recommendation tool', a
     response = nextDashboard();
     panel.receive({ type: 'setModelScope', scope: 'local' });
     await response;
-    const localExhausted = await tools.get('aroGetModelRecommendations').invoke({ input: {
-        role: 'coding', taskCategory: 'simple', excludedModels: [{ id: 'local', vendor: 'ollama' }]
-    } });
+    const localExhausted = await tools.get('aroGetModelRecommendations').invoke({
+        input: {
+            role: 'coding', taskCategory: 'simple', excludedModels: [{ id: 'local', vendor: 'ollama' }]
+        }
+    });
     const exhausted = JSON.parse(localExhausted.content[0].value);
     assert.equal(exhausted.modelScope, 'local');
     assert.equal(exhausted.recommendedModelId, null);
@@ -906,23 +1017,23 @@ async function loadWorkspacePreferenceHarness({ workspaceFolders, workspaceValue
         }
     };
     const vscode = {
-        EventEmitter: class { constructor() { this.event = () => ({ dispose() {} }); } fire() {} dispose() {} },
+        EventEmitter: class { constructor() { this.event = () => ({ dispose() { } }); } fire() { } dispose() { } },
         TreeItem: class { constructor(label) { this.label = label; } },
         TreeItemCollapsibleState: { None: 0 },
         ThemeIcon: class { constructor(id) { this.id = id; } },
         ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
         lm: {
-            registerTool: () => ({ dispose() {} }),
+            registerTool: () => ({ dispose() { } }),
             selectChatModels: async () => models
         },
         workspace: {
             workspaceFolders,
             getConfiguration: section => section === 'agentRoster.modelRecommendation' ? configuration : { get: (key, fallback) => fallback, inspect: () => undefined },
-            onDidChangeConfiguration: () => ({ dispose() {} })
+            onDidChangeConfiguration: () => ({ dispose() { } })
         },
-        commands: { registerCommand: (name, callback) => { commands.set(name, callback); return { dispose() {} }; } },
+        commands: { registerCommand: (name, callback) => { commands.set(name, callback); return { dispose() { } }; } },
         window: {
-            registerTreeDataProvider: () => ({ dispose() {} }),
+            registerTreeDataProvider: () => ({ dispose() { } }),
             showQuickPick: async () => undefined,
             showWarningMessage: message => { warnings.push(message); return Promise.resolve(undefined); },
             showErrorMessage: message => { errors.push(message); },
@@ -934,7 +1045,7 @@ async function loadWorkspacePreferenceHarness({ workspaceFolders, workspaceValue
                         onDidReceiveMessage: handler => { panel.receive = handler; },
                         postMessage: message => { if (['learningDashboard', 'learningDashboardError'].includes(message.type)) panel.resolve(message); }
                     },
-                    onDidDispose() {}
+                    onDidDispose() { }
                 };
                 return panel;
             }
@@ -1098,14 +1209,18 @@ test('learning webview sends scope, priority, and recommendation changes', async
     assert.equal(elements.get('activity-tabs').children[0].textContent, 'All');
     assert.equal(elements.get('domain-tabs').children.length, 6);
     assert.equal(elements.get('domain-tabs').children[0].textContent, 'All');
-    receive({ data: { type: 'learningDashboard', models: [
-        { id: 'm', name: 'Model', vendor: 'ollama', kind: 'local', selected: true, localTier: 'unrated', pricing: {} },
-        { id: 'c', name: 'Cloud', vendor: 'copilot', kind: 'cloud', selected: true, pricing: { source: 'unpriced', budgetClass: 'unpriced' } },
-        { id: 'cli', name: 'CLI', vendor: 'copilotcli', kind: 'cloud', selected: true, pricing: { source: 'vscode', budgetClass: 'high' } }
-    ], excludedModels: [], providerPolicyLabel: 'All providers', providerTypes: { ollama: 'local', copilot: 'cloud', copilotcli: 'cloud' }, lockedProviders: ['copilot', 'copilotcli'], dashboard: [
-        { activity: 'implement', domain: 'coding', difficulty: 'simple', recommendedModelId: 'c', recommendedVendor: 'copilot', learnedRecommendedModelId: 'c', learnedRecommendedVendor: 'copilot', sampleCount: 4, pooledSampleCount: 2, selectionMode: 'pooled', candidates: [{ id: 'c', name: 'Cloud', vendor: 'copilot', selectionMode: 'pooled', evidenceSource: 'mixed', samples: 3, pooledSamples: 2, successes: 3, failures: 1, score: 2 / 3, averageDurationMs: 1250, averageCostUsd: 0.0123, pricing: { source: 'vscode', budgetClass: 'low' } }] },
-        { activity: 'advise', domain: 'infrastructure', difficulty: 'complex', recommendedModelId: 'm', recommendedVendor: 'ollama', learnedRecommendedModelId: 'c', learnedRecommendedVendor: 'copilot', manualSelection: { modelId: 'm', vendor: 'ollama' }, sampleCount: 0, pooledSampleCount: 0, selectionMode: 'manual', eligibleCount: 1, candidates: [{ id: 'm', name: 'Model', vendor: 'ollama', selectionMode: 'manual', pricing: { source: 'local', budgetClass: 'low' } }, { id: 'c', name: 'Cloud', vendor: 'copilot', selectionMode: 'learned', pricing: { source: 'vscode', budgetClass: 'low' } }] }
-    ], recordCount: 6, scope: 'both', priority: 'cloud-first', hasSelectedLocalModel: true, pinnedAdvisorModel: { modelId: 'c', vendor: 'copilot' } } });
+    receive({
+        data: {
+            type: 'learningDashboard', models: [
+                { id: 'm', name: 'Model', vendor: 'ollama', kind: 'local', selected: true, localTier: 'unrated', pricing: {} },
+                { id: 'c', name: 'Cloud', vendor: 'copilot', kind: 'cloud', selected: true, pricing: { source: 'unpriced', budgetClass: 'unpriced' } },
+                { id: 'cli', name: 'CLI', vendor: 'copilotcli', kind: 'cloud', selected: true, pricing: { source: 'vscode', budgetClass: 'high' } }
+            ], excludedModels: [], providerPolicyLabel: 'All providers', providerTypes: { ollama: 'local', copilot: 'cloud', copilotcli: 'cloud' }, lockedProviders: ['copilot', 'copilotcli'], dashboard: [
+                { activity: 'implement', domain: 'coding', difficulty: 'simple', recommendedModelId: 'c', recommendedVendor: 'copilot', learnedRecommendedModelId: 'c', learnedRecommendedVendor: 'copilot', sampleCount: 4, pooledSampleCount: 2, selectionMode: 'pooled', candidates: [{ id: 'c', name: 'Cloud', vendor: 'copilot', selectionMode: 'pooled', evidenceSource: 'mixed', samples: 3, pooledSamples: 2, successes: 3, failures: 1, score: 2 / 3, averageDurationMs: 1250, averageCostUsd: 0.0123, pricing: { source: 'vscode', budgetClass: 'low' } }] },
+                { activity: 'advise', domain: 'infrastructure', difficulty: 'complex', recommendedModelId: 'm', recommendedVendor: 'ollama', learnedRecommendedModelId: 'c', learnedRecommendedVendor: 'copilot', manualSelection: { modelId: 'm', vendor: 'ollama' }, sampleCount: 0, pooledSampleCount: 0, selectionMode: 'manual', eligibleCount: 1, candidates: [{ id: 'm', name: 'Model', vendor: 'ollama', selectionMode: 'manual', pricing: { source: 'local', budgetClass: 'low' } }, { id: 'c', name: 'Cloud', vendor: 'copilot', selectionMode: 'learned', pricing: { source: 'vscode', budgetClass: 'low' } }] }
+            ], recordCount: 6, scope: 'both', priority: 'cloud-first', hasSelectedLocalModel: true, pinnedAdvisorModel: { modelId: 'c', vendor: 'copilot' }
+        }
+    });
     assert.equal(elements.get('recommendations').children.length, 2);
     assert.equal(elements.get('recommendations').children[0].children.length, 6);
     assert.equal(elements.get('recommendations').children[0].children[0].textContent, 'Implement');
@@ -1134,7 +1249,7 @@ test('learning webview sends scope, priority, and recommendation changes', async
     assert.equal(advisorDefault.value, JSON.stringify(['copilot', 'c']));
     assert.equal(elements.get('pin-advisor-model'), undefined);
     assert.notEqual(elements.get('context-difficulty-heading').hidden, true);
-    elements.get('activity-tabs').children[0].listeners.keydown({ key: 'ArrowRight', preventDefault() {} });
+    elements.get('activity-tabs').children[0].listeners.keydown({ key: 'ArrowRight', preventDefault() { } });
     assert.equal(elements.get('recommendations').children.length, 1);
     assert.equal(elements.get('context-count').textContent, 'Showing 1 of 2 contexts');
     assert.equal(elements.get('recommendations').children[0].children[0].hidden, true);
@@ -1144,7 +1259,7 @@ test('learning webview sends scope, priority, and recommendation changes', async
     assert.equal(elements.get('recommendations').children.length, 1);
     assert.equal(elements.get('context-count').textContent, 'Showing 1 of 2 contexts');
     assert.equal(elements.get('activity-tabs').children.find(tab => tab.dataset.filterValue === 'implement').focused, true);
-    elements.get('domain-tabs').children[0].listeners.keydown({ key: 'ArrowRight', preventDefault() {} });
+    elements.get('domain-tabs').children[0].listeners.keydown({ key: 'ArrowRight', preventDefault() { } });
     assert.equal(elements.get('recommendations').children.length, 1);
     assert.equal(elements.get('recommendations').children[0].children[1].hidden, true);
     assert.equal(elements.get('context-domain-heading').hidden, true);
@@ -1209,18 +1324,18 @@ test('advisor default pin is validated, cleared, and yields to manual overrides'
     ];
     let panel;
     const vscode = {
-        EventEmitter: class { constructor() { this.event = () => ({ dispose() {} }); } fire() {} dispose() {} },
+        EventEmitter: class { constructor() { this.event = () => ({ dispose() { } }); } fire() { } dispose() { } },
         TreeItem: class { constructor(label) { this.label = label; } },
         TreeItemCollapsibleState: { None: 0 },
         ThemeIcon: class { constructor(id) { this.id = id; } },
         lm: {
-            registerTool: (name, tool) => { tools.set(name, tool); return { dispose() {} }; },
+            registerTool: (name, tool) => { tools.set(name, tool); return { dispose() { } }; },
             selectChatModels: async () => models
         },
-        workspace: { getConfiguration: () => ({ get: () => [], inspect: () => undefined }), onDidChangeConfiguration: () => ({ dispose() {} }) },
-        commands: { registerCommand: (name, callback) => { commands.set(name, callback); return { dispose() {} }; } },
+        workspace: { getConfiguration: () => ({ get: () => [], inspect: () => undefined }), onDidChangeConfiguration: () => ({ dispose() { } }) },
+        commands: { registerCommand: (name, callback) => { commands.set(name, callback); return { dispose() { } }; } },
         window: {
-            registerTreeDataProvider: () => ({ dispose() {} }),
+            registerTreeDataProvider: () => ({ dispose() { } }),
             showQuickPick: async () => undefined,
             createWebviewPanel: () => {
                 panel = {
@@ -1230,7 +1345,7 @@ test('advisor default pin is validated, cleared, and yields to manual overrides'
                         onDidReceiveMessage: handler => { panel.receive = handler; },
                         postMessage: message => { if (['learningDashboard', 'learningDashboardError'].includes(message.type)) panel.resolve(message); }
                     },
-                    onDidDispose() {}
+                    onDidDispose() { }
                 };
                 return panel;
             }
