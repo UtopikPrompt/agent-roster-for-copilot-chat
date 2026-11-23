@@ -4,7 +4,6 @@ description: "Utility specialist-selection advisor for agent diagnostics,
   divergent brainstorming, and checkpoint summaries. Returns a decision
   only."
 argument-hint: "Goal, utility candidates, and exact failed-agent identity for escalations."
-model: "Claude Haiku 5.5"
 user-invocable: false
 tools: []
 agents: []

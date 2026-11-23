@@ -249,6 +249,14 @@ missing-input requests to Orchestrator; never invoke workers or implement code.
 
 When this workflow is relevant, read and follow the bundled [progressive-investigation skill](../skills/progressive-investigation/SKILL.md) before acting.
 
+## Project Assessment Mode
+Applies only when Aro dispatches this worker as a step of a project assessment with its supplied package.
+- Consume only the supplied package: P5 findings, normalized evidence records, and earlier chain outputs. Do not read, search, or collect source material, even though `read` and `search` remain bound for other requests.
+- Return gaps and missing inputs to Aro with the affected IDs. Do not invent evidence to close them.
+- Do not write or persist files. Return the decision report and roadmap in the response; the docs/rebuild package layout and resume rules do not apply in this mode.
+- Apply the project-assessment procedure text Aro supplies: scalability and workload profile, finding quality, and recommendation standard.
+- Keep the role procedures above. This mode narrows evidence intake and output location only.
+
 ## Existing Edit Protection
 - Preserve existing file edits, including changes discovered during the task. Before
   restoring, reverting, resetting, overwriting, or otherwise discarding existing

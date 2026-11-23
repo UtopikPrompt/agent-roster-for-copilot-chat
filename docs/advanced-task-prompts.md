@@ -35,6 +35,20 @@ Assess migration readiness for [system/workloads] moving from [current environme
 Review [specification/package and version] against [requirements or acceptance criteria], then prepare a portable implementation handoff for [approved scope]. Report evidence gaps, contradictions, acceptance scenarios, dependencies, work packages, validation gates, and decisions still needed. Keep proposed scope separate from approved scope; do not implement.
 ```
 
+## Project Assessment
+
+```text
+Assess the open project for [goal] across [approved sources, e.g. repository, SharePoint site, Azure DevOps project]. Declare scope first, collect read-only evidence per source, and report source status, coverage, and sufficiency per area. Sources whose tools are not bound at runtime are BLOCKED and unassessed until the runtime tool inventory is supplied. Mark BLOCKED or unassessed areas explicitly and produce no completeness or health score while any in-scope source is incomplete. Return the report content in the response. Persistence happens only when I explicitly ask you to save it and confirm a non-roster target path, through a separate handoff to the documentation writer.
+```
+
+Short form. Aro runs the full default assessment of the open project and returns one consolidated result in chat. When nothing is saved, that result contains the actual content of every named report-package document. Files are not written unless you explicitly authorize saving (P7) with target paths; the package is never saved automatically. You do not need to paste agent instructions or name agents:
+
+```text
+Do an assessment of this project.
+```
+
+Remote sources still need their approved tools and access, and persistence still needs an explicit save request and a confirmed target path.
+
 ## Tips
 
 - Ask for an As-Is System Reference when you need current-state evidence only; ask

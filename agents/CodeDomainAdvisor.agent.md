@@ -5,7 +5,6 @@ description: "Coding-domain selection advisor for product modernization,
   a routing decision only; never implements code or invokes agents."
 argument-hint: "Goal, stack, constraints, and candidate rows supplied from
   Orchestrator's embedded routing index."
-model: "Claude Haiku 5.5"
 user-invocable: false
 tools: []
 agents: []
