@@ -79,7 +79,7 @@ The roster includes 48 specialist agents, selected by Aro with help from the adv
 | [GovGitWorkflowAgent](agents/GovGitWorkflowAgent.agent.md) | Manage authorized Git branches, commits, pushes, pull requests, and recovery. |
 | [GovGithubAgent](agents/GovGithubAgent.agent.md) | Plan agent capabilities and manage GitHub issue triage and filing. |
 | [GovOfficeDocumentGenerator](agents/GovOfficeDocumentGenerator.agent.md) | Create and validate PowerPoint and Visio deliverables. |
-| [GovWebResearchAgent](agents/GovWebResearchAgent.agent.md) | Research current web sources and return evidence-linked findings. |
+| [GovPublicSourceResearchAgent](agents/GovPublicSourceResearchAgent.agent.md) | Research current public sources through web/fetch or exposed search/discovery tools and return evidence-linked findings, not implementation. |
 | [InfraAzureDevOpsAgent](agents/InfraAzureDevOpsAgent.agent.md) | Read and, after confirmation, change Azure DevOps work items, repos, pull requests, and wiki pages. |
 | [InfraCIDiagnostics](agents/InfraCIDiagnostics.agent.md) | Diagnose CI and GitHub Actions failures and propose minimal fixes. |
 | [InfraCloudDeploymentAgent](agents/InfraCloudDeploymentAgent.agent.md) | Design and implement cross-cloud deployment and provisioning. |

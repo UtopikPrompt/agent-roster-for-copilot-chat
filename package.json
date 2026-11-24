@@ -436,7 +436,7 @@
                 "path": "./agents/GovOfficeDocumentGenerator.agent.md"
             },
             {
-                "path": "./agents/GovWebResearchAgent.agent.md"
+                "path": "./agents/GovPublicSourceResearchAgent.agent.md"
             },
             {
                 "path": "./agents/InfraAzureDevOpsAgent.agent.md"

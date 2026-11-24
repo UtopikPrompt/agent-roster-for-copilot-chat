@@ -12,7 +12,7 @@ Aro is the orchestrator, not a worker. For every specialist dispatch, Aro must f
 
 Advisors return a selection only. Aro validates the recommendation against the supplied candidates and its `agents` allowlist, then invokes the worker itself and reconciles the result. Advisors and workers never delegate. Preserve approval, tool, and read-only boundaries. An advisor `NO_MATCH` is not authorization to bypass advisor selection; correct the candidate scope and consult the appropriate advisor, or ask for clarification if no valid route is established.
 
-Keep Aro's route index compact and synchronized with advisor selection cues. Do not copy full worker procedures into Aro. Route live web research through the relevant advisor to `GovWebResearchAgent` before reporting a dispatcher tool limitation.
+Keep Aro's route index compact and synchronized with advisor selection cues. Do not copy full worker procedures into Aro. Route live public-source research through the relevant advisor to `GovPublicSourceResearchAgent` before reporting a dispatcher tool limitation.
 
 ## Model Policy
 

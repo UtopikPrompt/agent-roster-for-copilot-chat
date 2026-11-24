@@ -89,34 +89,46 @@ test('Azure DevOps agent is a read-first, non-delegating worker routed through I
     assert.match(readme, /\[InfraAzureDevOpsAgent\]\(agents\/InfraAzureDevOpsAgent\.agent\.md\)/);
 });
 
-test('GovWebResearchAgent fetches supplied URLs with web/fetch independent of SearXNG', async () => {
-    const name = 'GovWebResearchAgent';
+test('GovPublicSourceResearchAgent owns public-source fetching with web/fetch before discovery', async () => {
+    const name = 'GovPublicSourceResearchAgent';
     const { metadata, body } = parseCustomization(await readFile(path.join(root, `agents/${name}.agent.md`), 'utf8'), name);
     const text = body.replace(/\s+/g, ' ');
-    assert.deepEqual(metadata.tools, ['read', 'search', 'web/fetch', 'io.github.ihor-sokoliuk/mcp-searxng/*']);
-    assert.ok(!metadata.tools.includes('azure-mcp/search'));
+    assert.deepEqual(metadata.tools, ['read', 'search', 'web/fetch']);
     assert.deepEqual(metadata.agents, []);
     const procedure = text.split('## Research Procedure ')[1]?.split(/ ## /)[0];
     assert.ok(procedure, 'Missing research procedure');
-    assert.match(procedure, /Before SearXNG discovery, attempt the declared `web\/fetch` tool for every directly supplied public URL, regardless of whether SearXNG tools are exposed/);
-    assert.match(procedure, /This direct-fetch gate is independent of SearXNG; absent SearXNG tools do not make supplied-URL fetching blocked/);
+    assert.match(procedure, /Fetch every directly supplied public URL first with the declared `web\/fetch` tool, before discovery or search/);
+    assert.match(procedure, /A missing search capability does not block direct URL fetching/);
     assert.match(text, /The only direct-fetch blocker is absence of the declared `web\/fetch` capability\/tool/);
-    assert.match(text, /Absent SearXNG tools do not make direct URL fetching blocked/);
     assert.match(text, /report BLOCKED with the exact missing capability\/tool or fetch service error/);
-    assert.match(procedure, /Fetch every directly supplied public URL with the declared `web\/fetch` tool\. This does not depend on SearXNG/);
-    assert.match(procedure, /use `web_url_read` only when that SearXNG tool is exposed/);
-    assert.match(procedure, /only when its tool is actually exposed/);
-    assert.match(procedure, /mark search-dependent work BLOCKED/);
-    assert.match(procedure, /Never use `azure-mcp\/search` as public web search/);
-    assert.doesNotMatch(text, /Read relevant result URLs with `web_url_read`/);
+    assert.match(procedure, /Fetch relevant discovered result URLs with the declared `web\/fetch` tool/);
     assert.match(text, /Cite only pages actually fetched/);
 });
 
-test('Aro routes direct public URL fetching through web/fetch with SearXNG optional', async () => {
-    const { body } = parseCustomization(await readFile(path.join(root, 'agents/Aro.agent.md'), 'utf8'), 'Aro');
-    const cue = body.replace(/\s+/g, ' ');
-    assert.match(cue, /Direct public URL fetching uses its declared `web\/fetch` tool and does not depend on SearXNG/);
-    assert.match(cue, /SearXNG tools .*are optional for search when exposed/);
+test('Aro and DocsGovernanceAdvisor route direct public URLs without search prerequisites', async () => {
+    const aro = parseCustomization(await readFile(path.join(root, 'agents/Aro.agent.md'), 'utf8'), 'Aro');
+    const aroCue = aro.body.replace(/\s+/g, ' ');
+    assert.match(aroCue, /Direct public URL fetching is owned by the worker through its declared `web\/fetch` tool and does not require a search-tool prerequisite/);
+
+    const advisor = parseCustomization(await readFile(path.join(root, 'agents/DocsGovernanceAdvisor.agent.md'), 'utf8'), 'DocsGovernanceAdvisor');
+    const advisorText = advisor.body.replace(/\s+/g, ' ');
+    assert.match(advisorText, /direct public URL fetching through its declared `web\/fetch` tool and requires no search-tool prerequisite/);
+});
+
+test('public-source research surfaces contain no removed search terms or tools', async () => {
+    const prohibitedFragments = [
+        ['Sear', 'XNG'].join(''),
+        ['sear', 'xng'].join(''),
+        ['mcp', 'sear', 'xng'].join('-'),
+        ['sear', 'xng', 'web', 'search'].join('_'),
+        ['sear', 'xng', 'instance', 'info'].join('_'),
+        ['web', 'url', 'read'].join('_')
+    ];
+    const prohibited = new RegExp(prohibitedFragments.join('|'), 'i');
+    for (const relativePath of ['agents/Aro.agent.md', 'agents/DocsGovernanceAdvisor.agent.md', 'agents/GovPublicSourceResearchAgent.agent.md', 'docs/agents.md', 'test/validate.test.mjs']) {
+        const text = await readFile(path.join(root, relativePath), 'utf8');
+        assert.doesNotMatch(text, prohibited, `${relativePath} contains a removed term or tool`);
+    }
 });
 
 test('Aro learns model outcomes by contextual activity, domain, and difficulty', async () => {

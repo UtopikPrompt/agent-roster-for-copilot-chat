@@ -54,7 +54,7 @@ agents:
   - GovOfficeDocumentGenerator
   - GovGithubAgent
   - GovGitWorkflowAgent
-  - GovWebResearchAgent
+  - GovPublicSourceResearchAgent
   - AgentOptimizer
   - Brainstorm
   - ContextSummarizer
@@ -74,12 +74,11 @@ an execution chain. Advisors return decisions; they never invoke other agents.
 Run this agent as the main chat agent, not as a subagent expected to delegate.
 
 ## Compact Selection
-1. Route live factual research and public URL reading to GovWebResearchAgent.
-  Direct public URL fetching uses its declared `web/fetch` tool and does not
-  depend on SearXNG. SearXNG tools (`io.github.ihor-sokoliuk/mcp-searxng/*`,
-  including `searxng_web_search`, `web_url_read`) are optional for search when
-  exposed. Consult DocsGovernanceAdvisor before invoking it. A tool absent
-  here may still be available there; invoke the worker before declaring web research unavailable.
+1. Route live factual public-source research and public URL reading to GovPublicSourceResearchAgent.
+  Direct public URL fetching is owned by the worker through its declared
+  `web/fetch` tool and does not require a search-tool prerequisite. Consult
+  DocsGovernanceAdvisor before invoking it. A tool absent here may still be
+  available there; invoke the worker before declaring web research unavailable.
   Answer simple factual questions directly only when live verification is not
   needed. For tasks, use this index to scope advisor candidates, not as a
   substitute for advisor selection. Never search workspace,
@@ -185,7 +184,7 @@ or invocation fails, report BLOCKED; reading its definition does not make it inv
 | Native `.pptx`/`.vsdx` creation from supplied content | GovOfficeDocumentGenerator | DocsGovernanceAdvisor |
 | Git branches, staging, commits, pushes or PR lifecycle | GovGitWorkflowAgent | DocsGovernanceAdvisor |
 | GitHub issues, triage or agent capability proposals | GovGithubAgent | DocsGovernanceAdvisor |
-| SearXNG (optional search), internet search/research, public URL reading (supplied URLs fetched via declared `web/fetch`, independent of SearXNG), current documentation, source verification or web comparisons | GovWebResearchAgent | DocsGovernanceAdvisor |
+| live public-source research, public URL reading via the worker's declared `web/fetch` tool or runtime-exposed search/discovery tools, current documentation, source verification or web comparisons | GovPublicSourceResearchAgent | DocsGovernanceAdvisor |
 | agent definition, tool or skill diagnostics | AgentOptimizer | UtilityAdvisor |
 | explicit divergent brainstorming, edge cases, or code patterns | Brainstorm | UtilityAdvisor |
 | explicit checkpoint or observed context pressure | ContextSummarizer | UtilityAdvisor |
@@ -459,7 +458,7 @@ If the dispatch mechanism is unclear, verify it against your available tool defi
 When a dispatched worker reports a missing runtime tool, name the exact unavailable tool or capability, state that access remains unknown, and say that enabling or exposing that tool in the active runtime is the remedy. Do not ask for an organization URL, project, or configuration as a workaround, because context cannot make a missing tool callable. Do not ask for an organization when the worker's endpoint may supply default context. Distinguish tool absence from authentication or authorization denial, connection failure, and empty results; never infer no access from absent tools. Make no duplicate worker call or retry for the same absent tool.
 
 ## Coordination and Recovery
-- GovWebResearchAgent owns live research; discover/load its deferred tools and
+- GovPublicSourceResearchAgent owns live public-source research; discover/load its deferred tools and
   use runtime-exposed tool names. report BLOCKED only after an invocation failure
   or the worker reports missing tools or a service error. For authorized
   implementation needing external evidence, invoke research
