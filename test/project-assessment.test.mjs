@@ -252,9 +252,11 @@ test('GitHub collector and skill never describe unverified tools as available', 
     assert.match(skillBody, /not yet approved/);
 });
 
-test('plan document remains PROPOSED', async () => {
-    const plan = await read('docs/project-assessment-workflow-plan.md');
-    assert.match(plan, /^Status: PROPOSED\./m);
+test('maintenance documents completed implementation and separate runtime gates', async () => {
+    const maintenance = await read('docs/maintenance.md');
+    assert.match(maintenance, /The project-assessment workflow implementation is complete/);
+    assert.match(maintenance, /Remote collection remains gated/);
+    assert.match(maintenance, /persistence has not been exercised as a live smoke test/);
 });
 
 test('new agents and skills are registered and documented', async () => {
@@ -524,10 +526,11 @@ test('report quality contract requires scoped evidence, scenario records, scoped
     assert.match(body, /No source in the Reference Basis verifies such a claim/);
 });
 
-test('plan document reflects conditional business analysis and the report output bar', async () => {
-    const plan = await read('docs/project-assessment-workflow-plan.md');
-    assert.match(plan, /\| A1 \| BusinessKnowledgeExpert \(BusinessKnowledgeAdvisor\)[^\n]*conditional/, 'A1 row must be conditional');
-    assert.match(plan, /Decision-Ready Report Contract/, 'plan must point to the report output bar');
+test('skill reflects conditional business analysis and the report output bar', async () => {
+    const { body } = await load(SKILL);
+    assert.match(body, /## Assessment Pipeline/);
+    assert.match(body, /## Decision-Ready Report Contract/);
+    assert.match(body, /A1|BusinessKnowledgeExpert|BusinessKnowledgeAdvisor/);
 });
 
 test('quality lenses cover reliability, recovery, security, cost, performance, operations, and conditional sustainability', async () => {
@@ -581,17 +584,14 @@ test('reference basis cites the two read Microsoft sources with caveats and mark
     assert.match(body, /Excluded: ISO 25010/);
 });
 
-test('plan keeps OD-1 to OD-8 and records the framework references and disposition acceptance', async () => {
-    const plan = await read('docs/project-assessment-workflow-plan.md');
-    for (let id = 1; id <= 8; id++) {
-        assert.match(plan, new RegExp(`\\| OD-${id} \\|`), `OD-${id} must remain in the open decisions table`);
-    }
-    assert.match(plan, /learn\.microsoft\.com\/en-us\/azure\/well-architected\/pillars/);
-    assert.match(plan, /select-cloud-migration-strategy/);
-    assert.match(plan, /snippet-only, not independently verified/);
-    assert.match(plan, /Excluded: ISO 25010|ISO 25010 \(source version conflict/);
-    assert.match(plan, /Migration Disposition/);
-    assert.match(plan, /Cost Lifecycle/);
+test('skill keeps framework references and disposition acceptance', async () => {
+    const { body } = await load(SKILL);
+    assert.match(body, /learn\.microsoft\.com\/en-us\/azure\/well-architected\/pillars/);
+    assert.match(body, /select-cloud-migration-strategy/);
+    assert.match(body, /snippet-only, not independently verified/);
+    assert.match(body, /Excluded: ISO 25010|ISO 25010 \(source version conflict/);
+    assert.match(body, /## Migration Disposition/);
+    assert.match(body, /## Cost Lifecycle/);
 });
 
 const PROCESS_STAGES = [
@@ -688,27 +688,22 @@ test('numeric performance metrics are allowed when sourced rather than blanket-b
     assert.doesNotMatch(body, /no numeric performance metrics|never use numeric performance/i);
 });
 
-test('report package artifact map matches between the skill and the plan output layout', async () => {
+test('report package artifact map matches the registered skill', async () => {
     const { body } = await load(SKILL);
-    const plan = await read('docs/project-assessment-workflow-plan.md');
     const skillFiles = [...sectionBetween(body, '## Report Package', '## Stop and Resume').matchAll(/^- `([A-Za-z0-9-]+\.md)`/gm)].map(match => match[1]);
-    const planFiles = [...sectionBetween(plan, '## 4. Output Layout', '## 5. Workflow Phases').matchAll(/^ {2}([A-Za-z0-9-]+\.md)\b/gm)].map(match => match[1]);
     assert.deepEqual(skillFiles, REPORT_PACKAGE, 'skill report package must list the 13 named files in order');
-    assert.deepEqual(planFiles, REPORT_PACKAGE, 'plan output layout must list the 13 named files in order');
     for (const retired of ['source-coverage-register.md', 'strengths-risks.md', 'gaps.md', 'recommendations-roadmap.md']) {
-        assert.ok(!skillFiles.includes(retired) && !planFiles.includes(retired), `${retired} must be consolidated`);
+        assert.ok(!skillFiles.includes(retired), `${retired} must be consolidated`);
     }
 });
 
-test('report package is labeled a proposed synthesis and keeps the README as executive decision summary', async () => {
+test('report package is labeled as a proposed synthesis and keeps the README as executive decision summary', async () => {
     const { body } = await load(SKILL);
-    const plan = await read('docs/project-assessment-workflow-plan.md');
     assert.match(body, /proposed synthesis/);
     assert.match(body, /not an official Microsoft or AWS deliverable/);
     assert.match(body, /The proposed output layout is not yet approved/);
     assert.match(body, /`README\.md`: executive decision summary/);
     assert.match(body, /`business-requirements\.md`: requirements with evidence references, or NOT ASSESSED/);
-    assert.match(plan, /proposed synthesis, not an official Microsoft or AWS deliverable/);
 });
 
 test('report package reserves tool outputs as labeled source artifacts, not the narrative report', async () => {
@@ -720,7 +715,6 @@ test('report package reserves tool outputs as labeled source artifacts, not the 
 
 test('reference basis lists the process sources and keeps vendor and optional caveats', async () => {
     const { body } = await load(SKILL);
-    const plan = await read('docs/project-assessment-workflow-plan.md');
     const sources = [
         'https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/plan/assess-workloads-for-cloud-migration',
         'https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/migrate/migration-wave-planning',
@@ -730,21 +724,18 @@ test('reference basis lists the process sources and keeps vendor and optional ca
     ];
     for (const source of sources) {
         assert.ok(body.includes(source), `skill must cite ${source}`);
-        assert.ok(plan.includes(source), `plan must cite ${source}`);
     }
     assert.match(body, /Microsoft and AWS pages are vendor-specific/);
     assert.match(body, /Google Cloud manual import and offline assessment material/);
-    assert.match(plan, /Assessment process sources \(read 2026-11-22; vendor-specific/);
 });
 
-test('plan keeps phases P0 to P8 in order with the persistence gate and PROPOSED status', async () => {
-    const plan = await read('docs/project-assessment-workflow-plan.md');
-    assert.match(plan, /^Status: PROPOSED\./m);
-    const phaseTable = sectionBetween(plan, '## 5. Workflow Phases', 'Phase handoffs');
-    const phases = [...phaseTable.matchAll(/^\| P(\d) \|/gm)].map(match => Number(match[1]));
-    assert.deepEqual(phases, [0, 1, 2, 3, 4, 5, 6, 7, 8], 'phase rows must be P0 to P8 in order');
-    assert.match(plan, /\| P7 \| Persistence \| Only with explicit user save authorization\./);
-    assert.match(plan, /\| P1 \| Runtime inventory gate \|/);
+test('Aro keeps workflow phases and persistence gate in the implementation', async () => {
+    const { body } = await agent('Aro');
+    for (let phase = 0; phase <= 8; phase++) {
+        assert.match(body, new RegExp(`P${phase}`), `P${phase} must remain in Aro coordination`);
+    }
+    assert.match(body, /P7 runs only after explicit user authorization to save/);
+    assert.match(body, /runtime inventory/i);
 });
 
 const INGESTION = 'skills/project-evidence-ingestion/SKILL.md';
@@ -834,13 +825,11 @@ test('collector tool lists and remote no-tool boundaries are unchanged by the ma
     assert.deepEqual(metadata.tools, ['read', 'search'], 'local collector keeps read and search only');
 });
 
-test('plan records the manifest update, drops the out-of-scope statement, and keeps PROPOSED status and OD items', async () => {
-    const plan = await read('docs/project-assessment-workflow-plan.md');
-    assert.doesNotMatch(plan, /out of scope for this refinement|Authorize a follow-up that adds/);
-    assert.match(plan, /collection-batch manifest/);
-    assert.match(plan, /`actual_retrieval_mode`/);
-    assert.match(plan, /^Status: PROPOSED\./m);
-    for (let id = 1; id <= 8; id++) assert.match(plan, new RegExp(`\\| OD-${id} \\|`), `OD-${id} must remain`);
+test('ingestion implementation records the manifest and actual retrieval mode', async () => {
+    const { body } = await load(INGESTION);
+    assert.match(body, /## Collection-Batch Manifest/);
+    assert.match(body, /One manifest per source batch in a run/);
+    assert.match(body, /`actual_retrieval_mode`/);
 });
 test('Aro P6-P8 keep report contents complete and require explicit save consent', async () => {
     const { body } = await agent('Aro');
@@ -851,6 +840,20 @@ test('Aro P6-P8 keep report contents complete and require explicit save consent'
     assert.match(body, /P8 is the single consolidated delivery/);
     assert.match(body, /If P7 was not authorized, include the full contents of every P6 package document/);
     assert.match(body, /an executive summary is not a substitute/);
+});
+
+test('P6 requires a technical Markdown package and a standalone executive HTML decision page', async () => {
+    const { body: aro } = await agent('Aro');
+    const { body: skill } = await load(SKILL);
+    assert.match(aro, /standalone executive HTML decision page/);
+    assert.match(aro, /default executive deliverable for project assessments only/);
+    assert.match(skill, /`executive-decision\.html`/);
+    assert.match(skill, /Go, Conditional Go, or No-Go/);
+    assert.match(skill, /no health or completeness score/);
+    assert.match(skill, /inline CSS and inline SVG only/);
+    assert.match(skill, /no external dependencies, CDNs/);
+    assert.match(skill, /Other README and export outputs are not converted to HTML/);
+    assert.match(skill, /Mermaid is allowed in Markdown only/);
 });
 
 test('collector completeness rejects unreadable results and compact output retains canonical records', async () => {

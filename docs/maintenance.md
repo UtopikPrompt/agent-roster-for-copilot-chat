@@ -30,7 +30,11 @@ Read-only analysis workers return complete findings and artifact content to Aro.
 
 The Git worker's embedded PR procedure no longer requires separately installed PR skills; available skills can enrich it. Existing direct invocation of that worker is preserved. Model benchmarking is explicitly manual-only; it is separate from task-aware model selection and never changes model preferences.
 
-## Project Assessment Collectors
+## Project Assessment
+
+The project-assessment workflow implementation is complete: the registered advisor, local and remote evidence collectors, cross-source assessment expert, reusable skills, report routing, and regression tests are maintained in this package. Static registration and test coverage are maintained by the repository's test suite. This is separate from live runtime approval and should not be described as a live-source smoke test.
+
+Remote collection remains gated by runtime tool availability, exact read-only tool verification, source authorization, and tenant or service scope. The local collector is implementation-complete but may still report BLOCKED or UNKNOWN when required tools or repository evidence are unavailable. Report persistence requires separate explicit save authorization, a confirmed target path outside the extension repository, and read-back; persistence has not been exercised as a live smoke test.
 
 Project assessment collectors are read-only and never delegate. Four source collectors (SharePoint, Microsoft 365, Azure DevOps, and GitHub) have `tools: []`: they are BLOCKED until debug binds exact tool names and verifies read-only behavior. Candidate names are kept in each body as PENDING, not active. Only ProjectEvidenceLocalRepoCollector has tools bound (`read` and `search`), and Git metadata stays UNKNOWN because no read-only Git tool is bound. The WorkIQ server prefix, the grouped Azure DevOps tool schemas, and each MCP server's read-only mode are unverified. Any tool that is absent or refused must report BLOCKED, never a substitute. The Azure DevOps collector is distinct from InfraAzureDevOpsAgent, which remains read and write. Assessment report persistence is defined as a writer route (GovDocumentationSuiteGenerator) that runs only with explicit user save authorization and a confirmed non-roster target path, and it reports saved files only after read-back. This route is defined but not tested or exercised live; until a debug run reads back a saved file, report persistence as not performed.
 
