@@ -16,6 +16,8 @@
     let workspacePreference = normalizeWorkspacePreference(null);
     let preferenceScope = 'profile';
     let learningLoading = false;
+    let activeEvaluationType = 'evaluation';
+    let evaluationTrials = [];
 
     const byId = id => document.getElementById(id);
 
@@ -56,6 +58,41 @@
         renderFilterTabs('domain-tabs', 'domain-tab', activeDomain, domainLabels, selectDomain);
     }
 
+    function renderEvaluationTabs() {
+        const container = byId('evaluation-tabs');
+        if (!container) return;
+        container.replaceChildren();
+        
+        const tabs = [
+            ['evaluation', 'Model Evaluation'], 
+            ['all', 'All']
+        ];
+        
+        for (const [value, label] of tabs) {
+            const tab = document.createElement('button');
+            tab.type = 'button';
+            tab.id = `evaluation-tab-${value}`;
+            tab.dataset.filterValue = value;
+            tab.textContent = label;
+            tab.tabIndex = value === activeEvaluationType ? 0 : -1;
+            tab.setAttribute('role', 'tab');
+            tab.setAttribute('aria-selected', String(value === activeEvaluationType));
+            tab.setAttribute('aria-controls', 'evaluation-panel');
+            tab.addEventListener('click', () => selectEvaluationType(value, true));
+            tab.addEventListener('keydown', event => {
+                const index = tabs.findIndex(([option]) => option === value);
+                const nextIndex = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+                    : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length
+                        : event.key === 'Home' ? 0
+                            : event.key === 'End' ? tabs.length - 1 : -1;
+                if (nextIndex < 0) return;
+                event.preventDefault();
+                selectEvaluationType(tabs[nextIndex][0], true);
+            });
+            container.append(tab);
+        }
+    }
+
     function selectActivity(activity, focus = false) {
         activeActivity = activity;
         renderActivityTabs();
@@ -68,6 +105,17 @@
         renderDomainTabs();
         if (focus) Array.from(byId('domain-tabs').children).find(tab => tab.dataset.filterValue === domain)?.focus();
         renderDashboard();
+    }
+
+    function selectEvaluationType(type, focus = false) {
+        activeEvaluationType = type;
+        renderEvaluationTabs();
+        renderEvaluationDashboard();
+        
+        if (focus) {
+            const tab = document.querySelector(`#evaluation-tab-${type}`);
+            if (tab) tab.focus();
+        }
     }
 
     function renderDashboard() {
@@ -112,15 +160,17 @@
                         : recommended?.selectionMode === 'explore' ? 'Exploring'
                             : recommended?.evidenceSource === 'mixed' ? 'Exact and pooled evidence'
                                 : recommended ? 'Exact evidence' : 'Fallback';
-            const priceSource = recommended?.pricing?.source === 'vscode'
-                ? 'Native rate'
-                : recommended?.pricing?.source === 'snapshot'
-                    ? `Rate snapshot ${recommended.pricing.snapshotDate}`
-                    : recommended?.pricing?.source === 'local'
-                        ? 'Local (no token charge)'
-                        : recommended?.pricing?.source === 'manual'
-                            ? 'Manual tier'
-                            : 'Unavailable';
+            const priceSource = recommended?.pricing?.budgetClass === 'unpriced' || recommended?.pricing?.source === 'unpriced'
+                ? 'Unknown'
+                : recommended?.pricing?.source === 'vscode'
+                    ? 'Native rate'
+                    : recommended?.pricing?.source === 'snapshot'
+                        ? `Rate snapshot ${recommended.pricing.snapshotDate}`
+                        : recommended?.pricing?.source === 'local'
+                            ? 'Local (no token charge)'
+                            : recommended?.pricing?.source === 'manual'
+                                ? 'Manual tier'
+                                : 'Unknown';
             manualChoice.title = [
                 `Selection mode: ${selectionMode}`,
                 cell.manualSelection && learnedRecommendation ? `Learned suggestion: ${learnedRecommendation.name} (${learnedRecommendation.vendor})` : null,
@@ -155,7 +205,9 @@
                 recommendation.append(learnedLabel);
             }
             const price = document.createElement('td');
-            price.textContent = recommended?.pricing?.budgetClass || '—';
+            price.textContent = recommended?.pricing?.budgetClass === 'unpriced'
+                ? 'Unknown'
+                : recommended?.pricing?.budgetClass || 'Unknown';
             price.title = `Price source: ${priceSource}${recommended?.pricing?.snapshotDate ? ` (${recommended.pricing.snapshotDate})` : ''}`;
             const evidence = document.createElement('td');
             const sampleCount = document.createElement('div');
@@ -320,8 +372,10 @@
         vscode.postMessage({ type: 'setAdvisorPinnedModel', model: value ? { modelId, vendor } : null });
     });
     byId('open-model-inventory').addEventListener('click', () => vscode.postMessage({ type: 'openModelInventory' }));
+    byId('open-model-evaluation').addEventListener('click', () => vscode.postMessage({ type: 'openModelEvaluation' }));
     renderActivityTabs();
     renderDomainTabs();
+    renderEvaluationTabs();
     byId('model-scope').addEventListener('change', event => {
         if (event.target.name !== 'model-scope') return;
         setStatus('Saving model scope...', 'is-loading');
@@ -345,6 +399,47 @@
     byId('workspace-model').addEventListener('change', () => {
         saveWorkspacePreference(byId('workspace-provider').value, byId('workspace-model').value);
     });
+    function renderEvaluationDashboard() {
+        const container = byId('evaluation-panel');
+        if (!container) return;
+        container.replaceChildren();
+
+        if (!evaluationTrials.length) {
+            const message = document.createElement('div');
+            message.className = 'evaluation-message';
+            message.textContent = 'No completed trials yet. Run the fixed backend-advisor evaluation to store two trials per selected candidate.';
+            container.appendChild(message);
+            return;
+        }
+
+        const list = document.createElement('div');
+        list.className = 'table-wrap';
+        const table = document.createElement('table');
+        table.innerHTML = '<thead><tr><th>Requested model</th><th>Trial</th><th>Status</th><th>Outcome</th><th>Duration</th><th>Resolved identity</th></tr></thead><tbody></tbody>';
+        const body = table.querySelector('tbody');
+        for (const trial of evaluationTrials.slice().reverse()) {
+            const row = document.createElement('tr');
+            const requested = trial.requested || {};
+            const cells = [
+                `${requested.id || 'unknown'} (${requested.vendor || 'unknown'})`,
+                String(trial.trial),
+                trial.status === 'blocked' ? `Blocked: ${trial.blockedType || 'invocation'}` : trial.status,
+                trial.status === 'blocked' ? 'Not scored' : `${trial.outcome}: ${trial.evidenceCode || ''}`,
+                Number.isFinite(trial.durationMs) ? `${Math.round(trial.durationMs)} ms` : 'Unverified',
+                trial.resolvedIdentity ? `${trial.resolvedIdentity.id || 'unknown'} (${trial.resolvedIdentity.vendor || 'unknown'})` : 'Unverified'
+            ];
+            for (const value of cells) {
+                const cell = document.createElement('td');
+                cell.textContent = value;
+                row.append(cell);
+            }
+            if (trial.reason) row.title = trial.reason;
+            if (trial.error) row.title = trial.error;
+            body.append(row);
+        }
+        list.append(table);
+        container.append(list);
+    }
 
     window.addEventListener('message', event => {
         const message = event.data;
@@ -361,7 +456,9 @@
             byId('model-priority').value = priority;
             renderAdvisorDefault();
             renderWorkspacePreference();
+            evaluationTrials = Array.isArray(message.evaluation?.trials) ? message.evaluation.trials : [];
             renderDashboard();
+            renderEvaluationDashboard();
             setStatus(scope === 'local' && !hasSelectedLocalModel
                 ? `Local only: no selected local model available. ${message.recordCount} outcomes stored.`
                 : `${message.recordCount} verified outcomes stored in this VS Code profile.`, 'is-ready');
@@ -375,6 +472,10 @@
             setStatus(`Could not load learning data: ${message.error}`, 'is-error');
         } else if (message.type === 'learningDashboardLoading') {
             setStatus('Loading model rates and Aro outcome history...', 'is-loading');
+        } else if (message.type === 'modelEvaluationDashboard') {
+            models = message.models;
+            renderEvaluationDashboard();
+            setStatus('Evaluating models...', 'is-loading');
         }
     });
 

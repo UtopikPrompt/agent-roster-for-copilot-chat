@@ -8,6 +8,8 @@
     "main": "./src/extension.js",
     "activationEvents": [
         "onCommand:agentRoster.openModelLearning",
+        "onCommand:agentRoster.openModelEvaluation",
+        "onCommand:agentRoster.runModelEvaluation",
         "onCommand:agentRoster.openModelInventory",
         "onView:agentRoster.modelLearning",
         "onLanguageModelTool:aroGetModelRecommendations",
@@ -98,6 +100,15 @@
                 "command": "agentRoster.openModelLearning",
                 "title": "Agent Roster: Open Aro Learning"
             },
+            {
+                "command": "agentRoster.openModelEvaluation",
+                "title": "Agent Roster: Open Aro Model Evaluation"
+            },
+            {
+                "command": "agentRoster.runModelEvaluation",
+                "title": "Agent Roster: Run Model Evaluation"
+            },
+
             {
                 "command": "agentRoster.pinAdvisorModel",
                 "title": "Agent Roster: Set Aro/Advisor Default Model"

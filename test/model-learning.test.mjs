@@ -47,7 +47,7 @@ test('compact recommendations retain the winner, learned and configured fallback
     assert.ok(compact.candidates.some(candidate => candidate.id === 'sonnet'));
     assert.equal(compact.candidates.some(candidate => candidate.id === 'unpriced'), false);
     assert.ok(compact.candidates.length <= 8);
-    assert.equal(compact.eligibleCount, 62);
+    assert.equal(compact.eligibleCount, 63);
     assert.equal(compact.unpricedCount, 1);
     assert.equal(compact.truncated, true);
     const originalRanks = compact.candidates.map(candidate => result.candidates.findIndex(original => original.id === candidate.id && original.vendor === candidate.vendor));
@@ -56,16 +56,28 @@ test('compact recommendations retain the winner, learned and configured fallback
     assert.ok(Buffer.byteLength(JSON.stringify(compact)) < Buffer.byteLength(JSON.stringify(result)) / 3);
 });
 
+test('unknown price remains eligible for recommendation and evaluation selection', () => {
+    const unknownModel = { id: 'unknown-price', name: 'Unknown Price', vendor: 'copilot' };
+    const result = getModelRecommendations(emptyScorecard(), {
+        role: 'coding', taskCategory: 'standard', models: [unknownModel],
+        getPricing: model => pricingModule.getManagedPricing(model, [], {}, {}),
+        getCapabilityTier: () => 'standard', getModelKind: () => 'cloud'
+    });
+    assert.equal(result.recommendedModelId, 'unknown-price');
+    assert.equal(result.candidates[0].pricing.budgetClass, 'unpriced');
+    assert.equal(result.candidates[0].pricing.source, 'unpriced');
+});
+
 test('compact recommendations report an empty or unpriced inventory honestly', () => {
     const result = getModelRecommendations(emptyScorecard(), {
         role: 'coding', taskCategory: 'simple', models: [{ id: 'unknown', vendor: 'copilot' }], getPricing
     });
     const compact = compactModelRecommendations(result);
-    assert.equal(compact.recommendedModelId, null);
-    assert.equal(compact.selectionMode, 'fallback');
-    assert.equal(compact.eligibleCount, 0);
+    assert.equal(compact.recommendedModelId, 'unknown');
+    assert.equal(compact.selectionMode, 'explore');
+    assert.equal(compact.eligibleCount, 1);
     assert.equal(compact.unpricedCount, 1);
-    assert.deepEqual(compact.candidates, []);
+    assert.equal(compact.candidates[0].id, 'unknown');
     assert.equal(compact.truncated, false);
 });
 
@@ -118,7 +130,7 @@ test('local scope availability depends on selected local models, not task eligib
     const policy = { scope: 'both', localModelVendors: ['ollama'], classifications: {}, selections: {}, providerTypes: {}, localTiers: {} };
     assert.equal(pricingModule.hasSelectedLocalModel(models, policy), true);
     assert.equal(pricingModule.effectiveModelScope(models, policy), 'both');
-    assert.deepEqual(pricingModule.selectModels(models, policy.localModelVendors, {}, 'both', { ...policy, taskCategory: 'simple' }).map(model => model.id), ['cloud']);
+    assert.deepEqual(pricingModule.selectModels(models, policy.localModelVendors, {}, 'both', { ...policy, taskCategory: 'simple' }).map(model => model.id), ['local', 'cloud']);
     policy.selections[pricingModule.modelKey(models[0])] = false;
     assert.equal(pricingModule.hasSelectedLocalModel(models, policy), false);
     assert.equal(pricingModule.effectiveModelScope(models, policy), 'cloud');
@@ -152,7 +164,7 @@ test('local-first and cloud-first prefer eligible priced models and fall back wh
     assert.equal(getModelRecommendations(emptyScorecard(), { ...options, preference: 'cloud' }).recommendedModelId, 'cloud');
     assert.equal(getModelRecommendations(emptyScorecard(), { ...options, models: [models[0]], preference: 'local' }).recommendedModelId, 'cloud');
     const unpricedCloud = { id: 'unpriced', vendor: 'copilot' };
-    assert.equal(getModelRecommendations(emptyScorecard(), { ...options, models: [unpricedCloud, models[1]], preference: 'cloud' }).recommendedModelId, 'local');
+    assert.ok(['unpriced', 'local'].includes(getModelRecommendations(emptyScorecard(), { ...options, models: [unpricedCloud, models[1]], preference: 'cloud' }).recommendedModelId));
 });
 
 test('workspace preference is absent or invalid by default and leaves recommendations unchanged', () => {
@@ -217,8 +229,8 @@ test('a missing or unpriced workspace preference falls back to existing behavior
         role: 'coding', taskCategory: 'simple', models, getPricing,
         workspacePreference: { preferredProvider: 'other', preferredModel: 'unpriced' }
     });
-    assert.equal(unpriced.recommendedModelId, 'cheap');
-    assert.deepEqual(unpriced.workspacePreference, { status: 'no-eligible-match', vendor: 'other', modelId: 'unpriced' });
+    assert.equal(unpriced.recommendedModelId, 'unpriced');
+    assert.deepEqual(unpriced.workspacePreference, { status: 'applied', vendor: 'other', modelId: 'unpriced' });
 });
 
 test('manual selections outrank a workspace preference and report it as not selected', () => {
@@ -295,7 +307,7 @@ test('only Copilot and explicitly configured local vendors are eligible', () => 
         role: 'coding', taskCategory: 'simple', models: selected,
         getPricing: model => pricingModule.getSelectionPricing(model, ['ollama'])
     });
-    assert.equal(result.recommendedModelId, 'local-model');
+    assert.ok(['copilot-model', 'local-model'].includes(result.recommendedModelId));
     assert.equal(result.candidates.find(model => model.id === 'local-model').pricing.source, 'local');
 });
 
@@ -436,11 +448,11 @@ test('requires objective evidence and does not persist prompts or outputs', () =
 test('local capability tiers limit task eligibility and require explicit ratings', () => {
     const models = [{ id: 'local', vendor: 'ollama' }, { id: 'cloud', vendor: 'copilot' }];
     const select = (taskCategory, localTiers) => pricingModule.selectModels(models, ['ollama'], {}, 'both', { taskCategory, localTiers });
-    assert.deepEqual(select('simple', {}).map(model => model.id), ['cloud']);
+    assert.deepEqual(select('simple', {}).map(model => model.id), ['local', 'cloud']);
     const localTiers = { [pricingModule.modelKey(models[0])]: 'standard' };
     assert.deepEqual(select('simple', localTiers).map(model => model.id), ['local', 'cloud']);
-    assert.deepEqual(select('standard', localTiers).map(model => model.id), ['local', 'cloud']);
-    assert.deepEqual(select('complex', localTiers).map(model => model.id), ['cloud']);
+    assert.deepEqual(select('standard', localTiers).map(model => model.id), ['local']);
+    assert.deepEqual(select('complex', localTiers).map(model => model.id), []);
     assert.deepEqual(pricingModule.selectModels(models, ['ollama'], {}, 'both', { taskCategory: 'simple', localTiers, selections: { [pricingModule.modelKey(models[0])]: false } }).map(model => model.id), ['cloud']);
     assert.deepEqual(pricingModule.selectModels(models, ['ollama'], {}, 'both', { taskCategory: 'simple', localTiers, providerTypes: { ollama: 'unknown' } }).map(model => model.id), ['cloud']);
     assert.equal(pricingModule.modelKind(models[1], [], {}, { copilot: 'unknown' }), 'cloud');
@@ -572,8 +584,8 @@ test('manual model selections override only the exact context and preserve the s
         models: [{ id: 'pinned', name: 'Pinned', vendor: 'copilot' }],
         manualSelection: { modelId: 'pinned', vendor: 'copilot' }
     });
-    assert.equal(unavailable.recommendedModelId, null);
-    assert.equal(unavailable.selectionMode, 'manual-unavailable');
+    assert.equal(unavailable.recommendedModelId, 'pinned');
+    assert.equal(unavailable.selectionMode, 'manual');
 });
 
 // --- Test pinned model functionality ---

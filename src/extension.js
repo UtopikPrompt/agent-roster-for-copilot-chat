@@ -2,7 +2,7 @@ const vscode = require('vscode');
 const { randomBytes } = require('node:crypto');
 const { readFile } = require('node:fs/promises');
 const path = require('node:path');
-const { effectiveModelScope, getInventorySummary, getManagedPricing, hasSelectedLocalModel, isCopilotCloudVendor, isModelSelected, modelKey, modelKind, selectModels } = require('./model-pricing');
+const { effectiveModelScope, getCapabilityTier, getInventorySummary, getManagedPricing, hasSelectedLocalModel, isCopilotCloudVendor, isModelSelected, modelKey, modelKind, selectModels } = require('./model-pricing');
 const {
     ACTIVITIES,
     compactModelRecommendations,
@@ -10,12 +10,36 @@ const {
     excludeUnavailableModels,
     getContextualLearningDashboard,
     getModelRecommendations,
-    hasFinitePrice,
     normalizeScorecard,
     recordOutcome,
     TASK_CATEGORIES
 } = require('./model-learning');
 const { ADVISOR_PINNED_MODEL_KEY, getAdvisorFilteredModels, getAdvisorPinnedModel } = require('./advisor-pinning');
+const { deriveCapabilityTier, evidenceForModel, normalizeEvidenceStore, normalizeTier } = require('./model-capability-evidence');
+const {
+    acceptBackendRoutingResponse,
+    candidateKey,
+    classifyBlocked,
+    classifyEvaluationError,
+    classifyTechnicalConfiguration,
+    classifyProviderBoundary,
+    classifyTrial,
+    evaluationCandidates,
+    fixedPilotTasks,
+    makeCallId,
+    plainTextControlPrompt,
+    buildEvaluationChatMessages,
+    normalizeSendRequestResponse,
+    pairTwoTrials,
+    resolvedIdentity,
+    summarizeEvaluationTrials,
+    summarizeModelCoverage,
+    CANDIDATE_REJECTIONS_KEY,
+    normalizeCandidateRejections,
+    rejectCandidateRejection,
+    clearCandidateRejection,
+    findCandidateRejection
+} = require('./model-evaluation');
 const {
     describeProviderAvailability,
     isProviderEnabled,
@@ -29,7 +53,9 @@ const {
 } = require('./provider-availability');
 
 const LEARNING_STORAGE_KEY = 'agentRoster.modelLearning.scorecard.v1';
+const EVALUATION_STORAGE_KEY = 'agentRoster.modelEvaluation.trials.v1';
 const INVENTORY_STORAGE_KEY = 'agentRoster.modelLearning.inventory.v1';
+const CAPABILITY_EVIDENCE_STORAGE_KEY = 'agentRoster.modelLearning.capabilityEvidence.v1';
 const MANUAL_SELECTIONS_KEY = 'agentRoster.modelLearning.manualSelections.v1';
 const dashboardRefreshers = new Set();
 let inventoryUpdates = Promise.resolve();
@@ -46,6 +72,8 @@ function getInventoryPolicy(context) {
         providerTypes: stored.providerTypes && typeof stored.providerTypes === 'object' && !Array.isArray(stored.providerTypes) ? stored.providerTypes : {},
         selections: stored.selections && typeof stored.selections === 'object' && !Array.isArray(stored.selections) ? stored.selections : {},
         localTiers: stored.localTiers && typeof stored.localTiers === 'object' && !Array.isArray(stored.localTiers) ? stored.localTiers : {},
+        capabilityTiers: stored.capabilityTiers && typeof stored.capabilityTiers === 'object' && !Array.isArray(stored.capabilityTiers) ? stored.capabilityTiers : {},
+        capabilityEvidence: normalizeEvidenceStore(context.globalState.get(CAPABILITY_EVIDENCE_STORAGE_KEY)),
         manualPriceTiers: stored.manualPriceTiers && typeof stored.manualPriceTiers === 'object' && !Array.isArray(stored.manualPriceTiers) ? stored.manualPriceTiers : {},
         localModelVendors: vscode.workspace.getConfiguration('agentRoster.modelLearning').get('localModelVendors', []),
         providerAvailability: getProviderAvailabilityState(context).effective
@@ -66,7 +94,8 @@ function saveInventoryPolicy(context, policy) {
     return context.globalState.update(INVENTORY_STORAGE_KEY, {
         scope: policy.scope, priority: policy.priority, classifications: policy.classifications,
         providerTypes: policy.providerTypes, selections: policy.selections,
-        localTiers: policy.localTiers, manualPriceTiers: policy.manualPriceTiers
+        localTiers: policy.localTiers, capabilityTiers: policy.capabilityTiers,
+        manualPriceTiers: policy.manualPriceTiers
     });
 }
 
@@ -162,14 +191,20 @@ function createLearningSidebar(context) {
         return row;
     };
     const openDashboard = 'agentRoster.openModelLearning';
+    
     return {
         onDidChangeTreeData: changes.event,
         async getChildren(element) {
             if (element) return [];
             const scorecard = normalizeScorecard(context.globalState.get(LEARNING_STORAGE_KEY));
             const rows = [
-                item('Open Aro Learning', '', 'dashboard', openDashboard)
+                item('Open Aro Learning', '', 'dashboard', openDashboard),
+                item('Open Model Evaluation', '', 'pulse', 'agentRoster.openModelEvaluation'),
             ];
+            
+            // Add evaluator entry
+
+            
             let models;
             try {
                 models = await selectChatModelsWithTimeout();
@@ -178,6 +213,7 @@ function createLearningSidebar(context) {
                 rows.push(item('Outcomes', String(scorecard.records.length), 'graph', openDashboard));
                 return rows;
             }
+            
             const policy = getInventoryPolicy(context);
             const summary = getInventorySummary(models, policy);
             const scopeLabel = { cloud: 'Cloud only', local: 'Local only', both: 'Both' }[summary.scope];
@@ -190,6 +226,7 @@ function createLearningSidebar(context) {
             if (summary.unknownCount) rows.push(item('Unclassified selected', String(summary.unknownCount), 'warning', openDashboard));
             rows.push(item('Unrated local', String(summary.unratedLocalCount), summary.unratedLocalCount ? 'warning' : 'check', openDashboard));
             rows.push(item('Outcomes', String(scorecard.records.length), 'graph', openDashboard));
+            
             const last = scorecard.records.at(-1);
             if (last) {
                 const difficulty = last.difficulty || last.taskCategory;
@@ -203,11 +240,12 @@ function createLearningSidebar(context) {
                     ...context, models: eligible,
                     getPricing: model => getManagedPricing(model, policy.localModelVendors, policy.classifications, policy.providerTypes, policy.manualPriceTiers),
                     getModelKind: model => modelKind(model, policy.localModelVendors, policy.classifications, policy.providerTypes),
+                    getCapabilityTier: model => getCapabilityTier(model, policy),
                     preference: summary.scope === 'both' ? policy.priority === 'local-first' ? 'local' : 'cloud' : undefined,
                     workspacePreference: getWorkspacePreference()
                 });
                 const recommended = result.candidates.find(candidate => candidate.id === result.recommendedModelId);
-                const fallback = difficulty === 'complex' && result.candidates.some(candidate => Number.isFinite(candidate.cost))
+                const fallback = difficulty === 'complex' && result.candidates.length
                     ? 'No learned recommendation' : 'No eligible model';
                 const contextLabel = last.activity
                     ? `${last.activity} / ${last.domain} / ${difficulty}`
@@ -266,13 +304,12 @@ async function changeModelPriority(context) {
 
 const WORKSPACE_PREFERENCE_SECTION = 'agentRoster.modelRecommendation';
 
-// Models a workspace preference may name: selected, classified, in the current scope, priced, for every difficulty.
+// Models a workspace preference may name: selected, classified, in the current scope, priced or unknown-priced, for every difficulty.
 function getWorkspacePreferenceCandidates(models, policy, scope) {
     const candidates = new Map();
     for (const taskCategory of TASK_CATEGORIES) {
         for (const model of selectModels(models, policy.localModelVendors, policy.classifications, scope, { ...policy, taskCategory })) {
-            const pricing = getManagedPricing(model, policy.localModelVendors, policy.classifications, policy.providerTypes, policy.manualPriceTiers);
-            if (hasFinitePrice(pricing)) candidates.set(`${model.vendor}\n${model.id}`, model);
+            candidates.set(`${model.vendor}\n${model.id}`, model);
         }
     }
     return [...candidates.values()];
@@ -347,7 +384,7 @@ function getProviderAvailabilityPayload(context, models) {
     });
 }
 
-const MODEL_CATALOG_ACTIONS = ['setModelSelected', 'setLocalTier', 'setManualPriceTier', 'setProviderSelected', 'setProviderType'];
+const MODEL_CATALOG_ACTIONS = ['setModelSelected', 'setLocalTier', 'setCapabilityTier', 'setManualPriceTier', 'setProviderSelected', 'setProviderType'];
 
 function toModelSummary(model) {
     return {
@@ -371,17 +408,24 @@ function getModelCatalogPayload(context, models) {
     const globalOnly = resolveProviderAvailability({ globalDisabledProviders: state.globalDisabledProviders });
     const vendors = [...new Set(models.map(model => model.vendor))];
     return {
-        catalog: models.map(toModelSummary).map(model => ({
+        catalog: models.map(toModelSummary).map(model => {
+            const evidence = evidenceForModel(policy.capabilityEvidence, model);
+            const statuses = new Set(evidence.map(record => record.status));
+            return {
             ...model,
             kind: modelKind(model, policy.localModelVendors, policy.classifications, policy.providerTypes),
             selected: isModelSelected(model, policy.localModelVendors, policy.classifications, policy.selections, policy.providerTypes),
-            localTier: policy.localTiers[modelKey(model)] || 'unrated',
+            localTier: policy.capabilityTiers[modelKey(model)] || policy.localTiers[modelKey(model)] || 'unrated',
+            capabilityTier: policy.capabilityTiers[modelKey(model)] || policy.localTiers[modelKey(model)] || 'unrated',
+            evidenceStatus: statuses.has('verified') ? 'verified' : statuses.has('stale') ? 'stale' : statuses.size ? 'unknown' : 'unknown',
+            evidenceSourceCount: evidence.length,
+            evidenceSources: evidence.map(record => record.source),
             pricing: getManagedPricing(model, policy.localModelVendors, policy.classifications, policy.providerTypes, policy.manualPriceTiers),
             enabled: {
                 global: isProviderEnabled(model.vendor, globalOnly),
                 workspace: isProviderEnabled(model.vendor, state.effective)
             }
-        })),
+        }}),
         providerTypes: Object.fromEntries(vendors.map(vendor => [vendor, isCopilotCloudVendor(vendor) ? 'cloud' : policy.providerTypes[vendor] || (policy.localModelVendors.includes(vendor) ? 'local' : 'unknown')])),
         lockedProviders: vendors.filter(isCopilotCloudVendor)
     };
@@ -391,17 +435,17 @@ function getModelCatalogPayload(context, models) {
 async function applyModelCatalogChange(context, message, models) {
     const policy = getInventoryPolicy(context);
     const hadSelectedLocalModel = hasSelectedLocalModel(models, policy);
-    if (['setModelSelected', 'setLocalTier', 'setManualPriceTier'].includes(message.type)) {
+    if (['setModelSelected', 'setLocalTier', 'setCapabilityTier', 'setManualPriceTier'].includes(message.type)) {
         const model = models.find(item => item.id === message.id && item.vendor === message.vendor);
         if (!model) throw new Error('Model is no longer available. Refresh the inventory.');
         const key = modelKey(model);
         if (message.type === 'setModelSelected') {
             if (typeof message.selected !== 'boolean') throw new Error('Invalid selection.');
             policy.selections = { ...policy.selections, [key]: message.selected };
-        } else if (message.type === 'setLocalTier') {
-            if (!['unrated', 'simple', 'standard', 'complex'].includes(message.tier)) throw new Error('Invalid local model tier.');
-            if (modelKind(model, policy.localModelVendors, policy.classifications, policy.providerTypes) !== 'local') throw new Error('Only local models have capability tiers.');
-            policy.localTiers = { ...policy.localTiers, [key]: message.tier };
+        } else if (message.type === 'setLocalTier' || message.type === 'setCapabilityTier') {
+            if (!['unrated', 'simple', 'standard', 'complex', 'high'].includes(message.tier)) throw new Error('Invalid capability tier.');
+            policy.capabilityTiers = { ...policy.capabilityTiers, [key]: message.tier };
+            if (message.type === 'setLocalTier') policy.localTiers = { ...policy.localTiers, [key]: message.tier };
         } else {
             if (!['unpriced', 'low', 'medium', 'high'].includes(message.tier)) throw new Error('Invalid price tier.');
             if (message.tier !== 'unpriced' && getManagedPricing(model, policy.localModelVendors, policy.classifications, policy.providerTypes).source !== 'unpriced') throw new Error('Manual price tiers apply only to unpriced models.');
@@ -484,14 +528,318 @@ async function applyProviderAvailabilityChange(context, message, models) {
     throw new Error('Unknown provider availability action.');
 }
 
+async function runModelEvaluation(context, inventoryCandidates, options = {}) {
+    try {
+        const inventory = await selectChatModelsWithTimeout();
+        const providerAvailability = getProviderAvailabilityState(context).effective;
+        const availableInventory = inventory.filter(model => isProviderEnabled(model.vendor, providerAvailability));
+        let candidates;
+
+        if (inventoryCandidates !== undefined) {
+            if (!Array.isArray(inventoryCandidates)) {
+                void vscode.window.showWarningMessage('No valid models were selected in the Model Inventory. Select one or more Use checkboxes and try again.');
+                return;
+            }
+            const seen = new Set();
+            const requested = [];
+            for (const candidate of inventoryCandidates) {
+                if (!candidate || typeof candidate !== 'object' || typeof candidate.id !== 'string' || !candidate.id.trim() || typeof candidate.vendor !== 'string' || !candidate.vendor.trim()) continue;
+                const qualified = { id: candidate.id.trim(), vendor: candidate.vendor.trim() };
+                const key = candidateKey(qualified);
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    requested.push(qualified);
+                }
+            }
+            if (!requested.length) {
+                void vscode.window.showWarningMessage('No models are selected in the Model Inventory. Check one or more Use boxes and try again.');
+                return;
+            }
+            const eligible = evaluationCandidates(availableInventory);
+            const rejectionState = normalizeCandidateRejections(context.globalState.get(CANDIDATE_REJECTIONS_KEY));
+            const eligibleKeys = new Set(requested.map(candidate => candidateKey(candidate)));
+            const rejectedKeys = new Set(rejectionState.rejections.map(item => candidateKey({ vendor: item.vendor, id: item.modelId })));
+            const requestedExcludedCount = requested.filter(candidate => rejectedKeys.has(candidateKey(candidate))).length;
+            candidates = eligible.filter(model => eligibleKeys.has(candidateKey(model)) && !rejectedKeys.has(candidateKey(model)));
+            if (requestedExcludedCount) {
+                void vscode.window.showWarningMessage(`${requestedExcludedCount} rejected candidate${requestedExcludedCount === 1 ? ' was' : 's were'} excluded. They require a human reset in Aro Model Evaluation before rerunning.`);
+            }
+            const staleCount = requested.filter(candidate => !availableInventory.some(model => model.id === candidate.id && model.vendor === candidate.vendor)).length;
+            if (staleCount) {
+                void vscode.window.showWarningMessage(`${staleCount} selected model${staleCount === 1 ? ' is' : 's are'} stale or no longer enabled in the discovered inventory. Evaluating only currently available selected models.`);
+            }
+            if (!candidates.length) {
+                void vscode.window.showWarningMessage('No selected models are currently available and eligible in the VS Code LM inventory. Refresh the inventory or update the Use selections.');
+                return;
+            }
+        } else {
+            const rejectionState = normalizeCandidateRejections(context.globalState.get(CANDIDATE_REJECTIONS_KEY));
+            const rejectedKeys = new Set(rejectionState.rejections.map(item => candidateKey({ vendor: item.vendor, id: item.modelId })));
+            candidates = evaluationCandidates(availableInventory).filter(candidate => !rejectedKeys.has(candidateKey(candidate)));
+            if (!candidates.length) {
+                void vscode.window.showWarningMessage('No eligible models are currently in the VS Code LM inventory. Refresh model availability and try again.');
+                return;
+            }
+            const choices = candidates.map(model => ({
+                label: model.name || model.id,
+                description: model.vendor,
+                detail: [model.family, model.version].filter(Boolean).join(' / ') || 'Inventory model',
+                model
+            }));
+            const selected = await vscode.window.showQuickPick(choices, {
+                title: 'Run model evaluation',
+                placeHolder: 'Select candidates; each will receive two trials',
+                canPickMany: true
+            });
+            if (!selected?.length) return;
+            candidates = selected.map(choice => choice.model);
+        }
+
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: 'Running fixed read-only model evaluation',
+            cancellable: true
+        }, async (progress, cancellation) => {
+            const previous = context.globalState.get(EVALUATION_STORAGE_KEY);
+            const trials = Array.isArray(previous?.trials) ? previous.trials : [];
+            let completed = 0;
+            const operationTotal = candidates.length * 3;
+            options.onStatus?.({ running: true, completed: 0, total: operationTotal, message: 'Starting one plain-text control per candidate...' });
+
+            for (const candidate of candidates) {
+                if (cancellation.isCancellationRequested || options.cancellation?.token.isCancellationRequested) break;
+                const requested = { id: candidate.id, vendor: candidate.vendor, family: candidate.family, version: candidate.version };
+                const started = Date.now();
+                const controlCallId = makeCallId();
+                let controlTrial;
+                let timedOut = false;
+                let controlPassed = false;
+                let controlPhase = 'pre_invocation';
+                try {
+                    controlPhase = 'model_selection';
+                    const filter = { vendor: candidate.vendor };
+                    if (candidate.family) filter.family = candidate.family;
+                    if (candidate.version) filter.version = candidate.version;
+                    const exactMatches = await vscode.lm.selectChatModels(filter);
+                    const model = exactMatches.find(item => item.id === candidate.id && item.vendor === candidate.vendor);
+                    if (!model) throw new Error(`Model not found: ${candidate.vendor}/${candidate.id}`);
+                    const requestToken = new vscode.CancellationTokenSource();
+                    const timeout = setTimeout(() => {
+                        timedOut = true;
+                        requestToken.cancel();
+                    }, 60_000);
+                    cancellation.onCancellationRequested(() => requestToken.cancel());
+                    options.cancellation?.token.onCancellationRequested(() => requestToken.cancel());
+                    let responseText = '';
+                    let runtimeResponse;
+                    try {
+                        controlPhase = 'send_request';
+                        runtimeResponse = await model.sendRequest(buildEvaluationChatMessages(plainTextControlPrompt, vscode), {}, requestToken.token);
+                        const normalizedResponse = await normalizeSendRequestResponse(runtimeResponse);
+                        if (normalizedResponse.blocked) throw new Error('sendRequest returned an invalid response text stream.');
+                        responseText = normalizedResponse.text;
+                    } finally {
+                        clearTimeout(timeout);
+                        requestToken.dispose();
+                    }
+                    controlPassed = responseText === 'EVALUATION_OK';
+                    controlTrial = {
+                        pairId: `${candidateKey(candidate)}:plain-control`,
+                        trialKind: 'plain_control',
+                        trial: 1,
+                        requested,
+                        callId: controlCallId,
+                        status: controlPassed ? 'control_pass' : 'control_fail',
+                        outcome: controlPassed ? 'pass' : 'fail',
+                        ...(controlPassed ? {} : { failureClass: classifyTrial({ status: 'control_fail' }) }),
+                        phase: 'response_parse',
+                        reason: controlPassed ? 'Plain-text control returned exactly EVALUATION_OK.' : `Plain-text control returned unexpected text: ${String(responseText).replace(/[\r\n\t]+/g, ' ').trim() || '(empty)'}`,
+                        durationMs: Date.now() - started
+                    };
+                } catch (error) {
+                    const classification = classifyEvaluationError(error, timedOut ? 'timeout' : controlPhase);
+                    controlTrial = {
+                        pairId: `${candidateKey(candidate)}:plain-control`,
+                        trialKind: 'plain_control',
+                        trial: 1,
+                        requested,
+                        callId: controlCallId,
+                        status: 'control_block',
+                        outcome: 'blocked',
+                        statusPhase: classification.phase,
+                        blockedType: timedOut ? 'timeout' : classification.blockedType,
+                        failureClass: classifyTechnicalConfiguration(error, timedOut ? 'timeout' : controlPhase, candidate)
+                            || classifyProviderBoundary(error, timedOut ? 'timeout' : classification.blockedType, timedOut ? 'timeout' : classification.phase),
+                        phase: timedOut ? 'timeout' : classification.phase,
+                        reason: classification.reason,
+                        error: classification.reason,
+                        durationMs: Date.now() - started
+                    };
+                }
+                trials.push(controlTrial);
+                completed += 1;
+                await context.globalState.update(EVALUATION_STORAGE_KEY, {
+                    schemaVersion: 1,
+                    updatedAt: new Date().toISOString(),
+                    trials: trials.slice(-500)
+                });
+                options.onStatus?.({ running: true, completed, total: operationTotal, trial: controlTrial, message: `${completed} of ${operationTotal} candidate/control operations processed.` });
+
+                if (!controlPassed) {
+                    for (const pair of pairTwoTrials([candidate], fixedPilotTasks())) {
+                        const skipped = {
+                            pairId: pair.pairId,
+                            taskId: pair.task.id,
+                            trialKind: 'strict_routing',
+                            trial: pair.trial,
+                            requested,
+                            callId: makeCallId(),
+                            status: 'blocked',
+                            outcome: 'blocked',
+                            blockedType: controlTrial.status === 'control_block' ? 'control_blocked' : 'control_failed',
+                            failureClass: 'not_applicable',
+                            phase: 'pre_invocation',
+                            reason: controlTrial.status === 'control_block' ? 'Strict routing skipped because the plain-text control was blocked.' : 'Strict routing skipped because the plain-text control did not return exactly EVALUATION_OK.',
+                            error: controlTrial.status === 'control_block' ? controlTrial.reason : 'Plain-text control mismatch.',
+                            strictSkipped: true,
+                            durationMs: 0
+                        };
+                        trials.push(skipped);
+                        completed += 1;
+                    }
+                    await context.globalState.update(EVALUATION_STORAGE_KEY, {
+                        schemaVersion: 1,
+                        updatedAt: new Date().toISOString(),
+                        trials: trials.slice(-500)
+                    });
+                    continue;
+                }
+
+                for (const pair of pairTwoTrials([candidate], fixedPilotTasks())) {
+                    if (cancellation.isCancellationRequested || options.cancellation?.token.isCancellationRequested) break;
+                    progress.report({ increment: 100 / operationTotal, message: `${candidate.name || candidate.id}, strict trial ${pair.trial}/2` });
+                    options.onStatus?.({ running: true, completed, total: operationTotal, message: `Running ${candidate.name || candidate.id}, strict trial ${pair.trial}/2...` });
+                    const callId = makeCallId();
+                    const started = Date.now();
+                    let timedOut = false;
+                    let strictPhase = 'pre_invocation';
+                    let trial;
+                    try {
+                        strictPhase = 'model_selection';
+                        const filter = { vendor: candidate.vendor };
+                        if (candidate.family) filter.family = candidate.family;
+                        if (candidate.version) filter.version = candidate.version;
+                        const exactMatches = await vscode.lm.selectChatModels(filter);
+                        const model = exactMatches.find(item => item.id === candidate.id && item.vendor === candidate.vendor);
+                        if (!model) throw new Error(`Model not found: ${candidate.vendor}/${candidate.id}`);
+                        const requestToken = new vscode.CancellationTokenSource();
+                        const timeout = setTimeout(() => {
+                            timedOut = true;
+                            requestToken.cancel();
+                        }, 60_000);
+                        cancellation.onCancellationRequested(() => requestToken.cancel());
+                        options.cancellation?.token.onCancellationRequested(() => requestToken.cancel());
+                        let responseText = '';
+                        let runtimeResponse;
+                        try {
+                            strictPhase = 'send_request';
+                            runtimeResponse = await model.sendRequest(buildEvaluationChatMessages(pair.task.prompt, vscode), {}, requestToken.token);
+                            const normalizedResponse = await normalizeSendRequestResponse(runtimeResponse);
+                            if (normalizedResponse.blocked) throw new Error('sendRequest returned an invalid response text stream.');
+                            responseText = normalizedResponse.text;
+                        } finally {
+                            clearTimeout(timeout);
+                            requestToken.dispose();
+                        }
+                        let acceptance;
+                        try {
+                            acceptance = acceptBackendRoutingResponse(responseText);
+                        } catch (parseError) {
+                            throw parseError;
+                        }
+                        const resolvedModel = resolvedIdentity(model, runtimeResponse);
+                        const scoreModel = resolvedModel || requested;
+                        trial = {
+                            pairId: pair.pairId,
+                            taskId: pair.task.id,
+                            trialKind: 'strict_routing',
+                            trial: pair.trial,
+                            requested,
+                            ...(resolvedModel ? { resolvedIdentity: resolvedModel } : {}),
+                            resolvedIdentityVerified: Boolean(resolvedModel),
+                            callId,
+                            status: acceptance.accepted ? 'completed_success' : 'completed_failure',
+                            outcome: acceptance.accepted ? 'success' : 'failure',
+                            phase: 'response_parse',
+                            evidenceCode: acceptance.accepted ? 'acceptance_passed' : acceptance.evidenceCode,
+                            ...(acceptance.accepted ? {} : { failureClass: classifyTrial({ status: 'completed_failure' }) }),
+                            reason: acceptance.reason,
+                            durationMs: Date.now() - started
+                        };
+                        const scorecard = recordOutcome(normalizeScorecard(context.globalState.get(LEARNING_STORAGE_KEY)), {
+                            activity: pair.task.activity,
+                            domain: pair.task.domain,
+                            difficulty: pair.task.difficulty,
+                            modelId: scoreModel.id,
+                            vendor: scoreModel.vendor,
+                            callId,
+                            agent: 'CodeBackendAdvisor',
+                            outcome: acceptance.accepted ? 'success' : 'failure',
+                            evidenceCode: acceptance.accepted ? 'acceptance_passed' : acceptance.evidenceCode,
+                            metrics: { durationMs: trial.durationMs }
+                        });
+                        await context.globalState.update(LEARNING_STORAGE_KEY, scorecard);
+                    } catch (error) {
+                        const classification = classifyEvaluationError(error, timedOut ? 'timeout' : strictPhase);
+                        trial = {
+                            pairId: pair.pairId,
+                            taskId: pair.task.id,
+                            trialKind: 'strict_routing',
+                            trial: pair.trial,
+                            requested,
+                            callId,
+                            status: 'blocked',
+                            outcome: 'blocked',
+                            blockedType: timedOut ? 'timeout' : classification.blockedType,
+                            failureClass: classifyTechnicalConfiguration(error, timedOut ? 'timeout' : strictPhase, candidate)
+                                || classifyProviderBoundary(error, timedOut ? 'timeout' : classification.blockedType, timedOut ? 'timeout' : classification.phase),
+                            phase: timedOut ? 'timeout' : classification.phase,
+                            reason: classification.reason,
+                            error: classification.reason,
+                            durationMs: Date.now() - started
+                        };
+                    }
+                    trials.push(trial);
+                    completed += 1;
+                    await context.globalState.update(EVALUATION_STORAGE_KEY, {
+                        schemaVersion: 1,
+                        updatedAt: new Date().toISOString(),
+                        trials: trials.slice(-500)
+                    });
+                    options.onStatus?.({ running: true, completed, total: operationTotal, trial, message: `${completed} of ${operationTotal} candidate/control/trial operations processed.` });
+                }
+            }
+            const cancelled = cancellation.isCancellationRequested || options.cancellation?.token.isCancellationRequested;
+            options.onStatus?.({ running: false, completed, total: operationTotal, cancelled: Boolean(cancelled), message: cancelled ? 'Evaluation cancelled.' : `Evaluation finished: ${completed} of ${operationTotal} operations completed or blocked.` });
+            refreshLearningViews();
+            void vscode.window.showInformationMessage(`Model evaluation finished: ${completed} of ${operationTotal} operations completed or blocked.`);
+        });
+    } catch (error) {
+        void vscode.window.showErrorMessage(`Could not run model evaluation: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+
 function activate(context) {
     context.subscriptions.push(registerModelLearningTools(context));
     context.subscriptions.push(registerSkillProcedureTool(context));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.openModelLearning', () => openModelLearning(context)));
+    context.subscriptions.push(vscode.commands.registerCommand('agentRoster.openModelEvaluation', candidates => openModelEvaluation(context, candidates)));
+    context.subscriptions.push(vscode.commands.registerCommand('agentRoster.runModelEvaluation', () => runModelEvaluation(context)));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.openModelInventory', scope => openModelInventory(context, scope)));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.changeModelScope', () => changeModelScope(context)));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.changeModelPriority', () => changeModelPriority(context)));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.pinAdvisorModel', () => pinAdvisorModel(context)));
+
     const sidebar = createLearningSidebar(context);
     context.subscriptions.push(sidebar, vscode.window.registerTreeDataProvider('agentRoster.modelLearning', sidebar));
     if (typeof vscode.lm.onDidChangeChatModels === 'function') context.subscriptions.push(vscode.lm.onDidChangeChatModels(refreshLearningViews));
@@ -530,6 +878,7 @@ function registerModelLearningTools(context) {
                 })),
                 getPricing: model => getManagedPricing(model, policy.localModelVendors, policy.classifications, policy.providerTypes, policy.manualPriceTiers),
                 getModelKind: model => modelKind(model, policy.localModelVendors, policy.classifications, policy.providerTypes),
+                getCapabilityTier: model => getCapabilityTier(model, policy),
                 preference: scope === 'both' ? policy.priority === 'local-first' ? 'local' : 'cloud' : undefined,
                 workspacePreference: getWorkspacePreference()
             });
@@ -679,6 +1028,7 @@ function openModelLearning(context) {
                     getModelsForTask: difficulty => selectModels(summaries, policy.localModelVendors, policy.classifications, scope, { ...policy, taskCategory: difficulty }),
                     getManualSelection: context => getManualSelection(manualSelections, context),
                     getModelKind: model => modelKind(model, policy.localModelVendors, policy.classifications, policy.providerTypes),
+                    getCapabilityTier: model => getCapabilityTier(model, policy),
                     preference: scope === 'both' ? policy.priority === 'local-first' ? 'local' : 'cloud' : undefined,
                     workspacePreference: getWorkspacePreference()
                 }),
@@ -703,6 +1053,10 @@ function openModelLearning(context) {
         if (message.type === 'ready' || message.type === 'refreshLearning') void refresh();
         if (message.type === 'openModelInventory') {
             void vscode.commands.executeCommand('agentRoster.openModelInventory');
+            return;
+        }
+        if (message.type === 'openModelEvaluation') {
+            void vscode.commands.executeCommand('agentRoster.openModelEvaluation');
             return;
         }
         if (message.type === 'setWorkspacePreference') {
@@ -756,17 +1110,18 @@ function openModelLearning(context) {
                         models: eligibleModels,
                         getPricing: model => getManagedPricing(model, policy.localModelVendors, policy.classifications, policy.providerTypes, policy.manualPriceTiers),
                         getModelKind: model => modelKind(model, policy.localModelVendors, policy.classifications, policy.providerTypes),
+                        getCapabilityTier: model => getCapabilityTier(model, policy),
                         preference: scope === 'both' ? policy.priority === 'local-first' ? 'local' : 'cloud' : undefined,
                         workspacePreference: getWorkspacePreference()
                     });
-                    const choices = recommendations.candidates.filter(candidate => Number.isFinite(candidate.cost)).map(candidate => ({
+                    const choices = recommendations.candidates.map(candidate => ({
                         label: candidate.name,
                         description: candidate.vendor,
                         detail: `${candidate.pricing.budgetClass}; ${candidate.samples} exact / ${candidate.pooledSamples} pooled outcomes`,
                         modelId: candidate.id,
                         vendor: candidate.vendor
                     }));
-                    if (!choices.length) throw new Error('No eligible priced models are available for this context and scope.');
+                    if (!choices.length) throw new Error('No eligible models are available for this context and scope.');
                     const choice = await vscode.window.showQuickPick(choices, {
                         title: `Manual model: ${learningContext.activity} / ${learningContext.domain} / ${learningContext.difficulty}`,
                         placeHolder: 'Choose a model for this context'
@@ -867,6 +1222,11 @@ function openModelInventory(context, scope = 'global') {
             void refresh();
             return;
         }
+        if (message.type === 'openModelEvaluation') {
+            const candidates = Array.isArray(message.candidates) ? message.candidates : [];
+            void vscode.commands.executeCommand('agentRoster.openModelEvaluation', candidates);
+            return;
+        }
         const isCatalogAction = MODEL_CATALOG_ACTIONS.includes(message.type);
         if (!isCatalogAction && !PROVIDER_AVAILABILITY_ACTIONS.includes(message.type)) {
             panel.webview.postMessage({ type: 'providerAvailabilityError', error: 'Unknown provider availability action.' });
@@ -934,7 +1294,7 @@ function getModelInventoryHtml(webview, extensionUri) {
       <div class="table-wrap"><table><thead><tr><th>Enabled</th><th>Provider</th><th>Models</th><th>Global state</th><th>Effective here</th></tr></thead><tbody id="workspace-providers"></tbody></table></div>
     </section>
     <section id="model-catalog" class="catalog-section" aria-labelledby="catalog-heading">
-      <div class="toolbar"><h2 id="catalog-heading">Models</h2><span id="model-count-label">0 models</span></div>
+      <div class="toolbar"><h2 id="catalog-heading">Models</h2><div class="catalog-toolbar-actions"><span id="model-count-label">0 models</span><button id="open-model-evaluation" type="button">Open Model Evaluation</button></div></div>
       <p id="catalog-scope" class="provider-hint" aria-live="polite"></p>
       <div class="inventory-content">
         <div class="provider-policy"><p id="provider-policy-note" class="provider-hint" aria-live="polite"></p><label><input id="show-excluded" type="checkbox"> Show excluded providers and models</label></div>
@@ -951,6 +1311,238 @@ function getModelInventoryHtml(webview, extensionUri) {
 </html>`;
 }
 
+const modelEvaluationPanels = new WeakMap();
+
+function openModelEvaluation(context, candidates) {
+    const existing = modelEvaluationPanels.get(context);
+    if (existing) {
+        if (Array.isArray(candidates)) {
+            existing.preselected = candidates
+                .filter(candidate => candidate && typeof candidate.id === 'string' && typeof candidate.vendor === 'string')
+                .map(candidate => ({ id: candidate.id.trim(), vendor: candidate.vendor.trim() }))
+                .filter(candidate => candidate.id && candidate.vendor);
+            existing.panel.webview.postMessage({ type: 'preselectCandidates', candidates: existing.preselected });
+        }
+        existing.panel.reveal(vscode.ViewColumn.One);
+        void existing.refresh();
+        return;
+    }
+
+    const panel = vscode.window.createWebviewPanel(
+        'agentRosterModelEvaluation',
+        'Aro Model Evaluation',
+        vscode.ViewColumn.One,
+        { enableScripts: true }
+    );
+    const preselected = Array.isArray(candidates)
+        ? candidates.filter(candidate => candidate && typeof candidate.id === 'string' && typeof candidate.vendor === 'string')
+            .map(candidate => ({ id: candidate.id.trim(), vendor: candidate.vendor.trim() }))
+            .filter(candidate => candidate.id && candidate.vendor)
+        : [];
+    const state = { panel, preselected, cancellation: null, refresh: undefined };
+    modelEvaluationPanels.set(context, state);
+
+    let refreshRequest = 0;
+    const refresh = async () => {
+        const current = ++refreshRequest;
+        panel.webview.postMessage({ type: 'modelEvaluationLoading' });
+        let models = [];
+        let error = '';
+        try {
+            models = await selectChatModelsWithTimeout();
+        } catch (caught) {
+            error = caught instanceof Error ? caught.message : String(caught);
+        }
+        if (current !== refreshRequest) return;
+        const policy = getProviderAvailabilityState(context).effective;
+        const effective = models.filter(model => isProviderEnabled(model.vendor, policy));
+        const evaluationPolicy = getInventoryPolicy(context);
+        const candidatesPayload = evaluationCandidates(effective).map(toModelSummary).map(model => {
+            const evidence = evidenceForModel(evaluationPolicy.capabilityEvidence, model);
+            const existingTier = evaluationPolicy.capabilityTiers[modelKey(model)] || evaluationPolicy.localTiers[modelKey(model)] || 'unrated';
+            return {
+                ...model,
+                kind: modelKind(model, evaluationPolicy.localModelVendors, evaluationPolicy.classifications, evaluationPolicy.providerTypes),
+                capabilityTier: normalizeTier(existingTier),
+                evidenceStatus: evidence.some(record => record.status === 'verified') ? 'verified'
+                    : evidence.some(record => record.status === 'stale') ? 'stale'
+                        : evidence.length ? 'unknown' : 'unknown',
+                evidenceSourceCount: evidence.length,
+                evidenceSources: evidence.map(record => record.source),
+                pricing: getManagedPricing(model, evaluationPolicy.localModelVendors, evaluationPolicy.classifications, evaluationPolicy.providerTypes, evaluationPolicy.manualPriceTiers)
+            };
+        });
+        const evaluation = context.globalState.get(EVALUATION_STORAGE_KEY) || { schemaVersion: 1, trials: [] };
+        const rejections = normalizeCandidateRejections(context.globalState.get(CANDIDATE_REJECTIONS_KEY));
+        const rejectionByKey = new Map(rejections.rejections.map(item => [candidateKey({ vendor: item.vendor, id: item.modelId }), item]));
+        const coverage = summarizeModelCoverage(candidatesPayload, evaluation.trials);
+        const coverageByKey = new Map(coverage.map(candidate => [candidateKey(candidate), candidate]));
+        const enrichedCandidates = candidatesPayload.map(candidate => {
+            const covered = coverageByKey.get(candidateKey(candidate));
+            const rejection = rejectionByKey.get(candidateKey(candidate));
+            const evidence = evidenceForModel(evaluationPolicy.capabilityEvidence, candidate);
+            const strictCompleted = covered?.coverageStatus === 'strict_completed';
+            const strictBlocked = covered?.coverageStatus === 'strict_blocked';
+            const trialRows = (evaluation.trials || []).filter(trial => trial.requested?.vendor === candidate.vendor && trial.requested?.id === candidate.id);
+            const repeatedPasses = trialRows
+                .filter(trial => trial.trialKind === 'strict_routing' && (trial.status === 'completed_success' || trial.outcome === 'success'))
+                .map(trial => trial.taskId || trial.task?.id || 'complex coding advisor task');
+            const streamBlocked = trialRows.some(trial => ['response_stream', 'invalid_response_stream'].includes(trial.phase));
+            const controlBlocked = trialRows.some(trial => trial.status === 'control_fail' || trial.status === 'control_blocked' || trial.status === 'control_mismatch');
+            const providerBlocked = trialRows.some(trial => trial.status === 'blocked' && trial.failureClass === 'incompatible_provider_boundary');
+            const capabilityTier = deriveCapabilityTier({
+                existingTier: candidate.capabilityTier,
+                rejected: Boolean(rejection),
+                providerBlocked,
+                streamBlocked,
+                controlBlocked,
+                localEvidence: { strictCompleted, strictCompletedPasses: repeatedPasses.length, repeatedPasses, contexts: repeatedPasses },
+                externalRecords: evidence
+            });
+            return {
+                ...candidate,
+                capabilityTier,
+                ...(covered || {}),
+                ...(rejection ? { rejection } : {})
+            };
+        });
+        panel.webview.postMessage({
+            type: 'modelEvaluation',
+            error,
+            candidates: enrichedCandidates,
+            preselected: state.preselected,
+            evaluation,
+            rejections: rejections.rejections,
+            evaluationSummary: summarizeEvaluationTrials(evaluation.trials)
+        });
+    };
+    state.refresh = refresh;
+    dashboardRefreshers.add(refresh);
+
+    panel.webview.onDidReceiveMessage(message => {
+        if (!message || typeof message !== 'object') return;
+        if (message.type === 'ready' || message.type === 'refreshModelEvaluation') {
+            void refresh();
+            return;
+        }
+        if (message.type === 'rejectCandidate') {
+            if (!message.candidate || typeof message.candidate.id !== 'string' || typeof message.candidate.vendor !== 'string') return;
+            const candidate = { id: message.candidate.id.trim(), vendor: message.candidate.vendor.trim() };
+            if (!candidate.id || !candidate.vendor) return;
+            void (async () => {
+                const confirmed = await vscode.window.showWarningMessage(
+                    `Reject ${candidate.vendor}/${candidate.id}? It will be excluded from future reruns until reset.`,
+                    { modal: true },
+                    'Reject candidate'
+                );
+                if (confirmed !== 'Reject candidate') return;
+                const reasonCode = typeof message.reasonCode === 'string' && message.reasonCode.trim()
+                    ? message.reasonCode.trim().slice(0, 100)
+                    : ((await vscode.window.showInputBox({
+                        title: 'Reason code',
+                        prompt: 'Enter a human rejection reason code',
+                        value: 'human_review',
+                        placeHolder: 'human_review'
+                    })) || '').trim().slice(0, 100);
+                if (!reasonCode) return;
+                const reasonText = typeof message.reasonText === 'string' && message.reasonText.trim()
+                    ? message.reasonText.trim().slice(0, 2000)
+                    : ((await vscode.window.showInputBox({
+                        title: 'Optional rejection detail',
+                        prompt: 'Add a short human-applied reason',
+                        placeHolder: 'Optional'
+                    })) || '').trim().slice(0, 2000);
+                const evaluation = context.globalState.get(EVALUATION_STORAGE_KEY) || { trials: [] };
+            const trialIds = (Array.isArray(evaluation.trials) ? evaluation.trials : [])
+                .filter(trial => trial?.requested?.id === candidate.id && trial?.requested?.vendor === candidate.vendor)
+                .map(trial => typeof trial.pairId === 'string' ? trial.pairId : '')
+                .filter(Boolean);
+            const callIds = (Array.isArray(evaluation.trials) ? evaluation.trials : [])
+                .filter(trial => trial?.requested?.id === candidate.id && trial?.requested?.vendor === candidate.vendor)
+                .map(trial => typeof trial.callId === 'string' ? trial.callId : '')
+                .filter(Boolean);
+            const current = normalizeCandidateRejections(context.globalState.get(CANDIDATE_REJECTIONS_KEY));
+            const next = rejectCandidateRejection(current, candidate, {
+                reasonCode,
+                ...(reasonText ? { reasonText } : {}),
+                sourceTrialIds: trialIds,
+                sourceCallIds: callIds
+            });
+                await context.globalState.update(CANDIDATE_REJECTIONS_KEY, next);
+                await refresh();
+            })();
+            return;
+        }
+        if (message.type === 'clearCandidateRejection') {
+            if (!message.candidate || typeof message.candidate.id !== 'string' || typeof message.candidate.vendor !== 'string') return;
+            const candidate = { id: message.candidate.id.trim(), vendor: message.candidate.vendor.trim() };
+            if (!candidate.id || !candidate.vendor) return;
+            void (async () => {
+                const confirmed = await vscode.window.showWarningMessage(
+                    `Reset rejection for ${candidate.vendor}/${candidate.id}?`,
+                    { modal: true },
+                    'Reset rejection'
+                );
+                if (confirmed !== 'Reset rejection') return;
+                const current = normalizeCandidateRejections(context.globalState.get(CANDIDATE_REJECTIONS_KEY));
+                const next = clearCandidateRejection(current, candidate);
+                await context.globalState.update(CANDIDATE_REJECTIONS_KEY, next);
+                await refresh();
+            })();
+            return;
+        }
+        if (message.type === 'runModelEvaluation') {
+            if (state.cancellation && !state.cancellation.token.isCancellationRequested) return;
+            const selected = Array.isArray(message.candidates) ? message.candidates : [];
+            const normalized = [];
+            const seen = new Set();
+            for (const candidate of selected) {
+                if (!candidate || typeof candidate.id !== 'string' || typeof candidate.vendor !== 'string') continue;
+                const pair = { id: candidate.id.trim(), vendor: candidate.vendor.trim() };
+                const key = candidateKey(pair);
+                if (!pair.id || !pair.vendor || seen.has(key)) continue;
+                seen.add(key);
+                normalized.push(pair);
+            }
+            if (!normalized.length) {
+                panel.webview.postMessage({ type: 'modelEvaluationStatus', running: false, completed: 0, total: 0, message: 'Select at least one model, then run the evaluation.' });
+                return;
+            }
+            const rejectionState = normalizeCandidateRejections(context.globalState.get(CANDIDATE_REJECTIONS_KEY));
+            const rejectedKeys = new Set(rejectionState.rejections.map(item => candidateKey({ vendor: item.vendor, id: item.modelId })));
+            const eligible = normalized.filter(candidate => !rejectedKeys.has(candidateKey(candidate)));
+            const excludedCount = normalized.length - eligible.length;
+            if (excludedCount) {
+                panel.webview.postMessage({ type: 'modelEvaluationStatus', running: false, completed: 0, total: eligible.length * 3, message: `Excluded ${excludedCount} rejected candidate${excludedCount === 1 ? '' : 's'}; no silent un-rejection occurred.` });
+                if (!eligible.length) return;
+            }
+            state.cancellation = new vscode.CancellationTokenSource();
+            panel.webview.postMessage({ type: 'modelEvaluationStatus', running: true, completed: 0, total: eligible.length * 3, message: `Starting plain-text controls, then fixed backend routing evaluation for ${eligible.length} eligible candidate${eligible.length === 1 ? '' : 's'}...` });
+            void runModelEvaluation(context, eligible, {
+                dedicated: true,
+                cancellation: state.cancellation,
+                onStatus: status => panel.webview.postMessage({ type: 'modelEvaluationStatus', ...status })
+            }).finally(() => {
+                state.cancellation?.dispose();
+                state.cancellation = null;
+                void refresh();
+            });
+            return;
+        }
+        if (message.type === 'cancelModelEvaluation') {
+            state.cancellation?.cancel();
+            panel.webview.postMessage({ type: 'modelEvaluationStatus', running: false, cancelled: true, message: 'Cancellation requested.' });
+        }
+    }, null, context.subscriptions);
+
+    panel.onDidDispose(() => {
+        dashboardRefreshers.delete(refresh);
+        state.cancellation?.dispose();
+        if (modelEvaluationPanels.get(context) === state) modelEvaluationPanels.delete(context);
+    }, null, context.subscriptions);
+    panel.webview.html = getModelEvaluationHtml(panel.webview, context.extensionUri);
+}
+
 async function selectChatModelsWithTimeout() {
     let timeout;
     try {
@@ -965,6 +1557,44 @@ async function selectChatModelsWithTimeout() {
     } finally {
         clearTimeout(timeout);
     }
+}
+
+function getModelEvaluationHtml(webview, extensionUri) {
+    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'model-evaluation.js'));
+    const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'model-evaluation.css'));
+    const nonce = randomBytes(16).toString('base64');
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+  <link rel="stylesheet" href="${styleUri}">
+  <title>Aro Model Evaluation</title>
+</head>
+<body>
+  <header>
+    <div><h1>Aro Model Evaluation</h1><p id="evaluation-status-line">Loading evaluation inventory...</p></div>
+  </header>
+  <main class="evaluation-layout">
+    <aside class="control-column">
+      <div class="control-heading"><h2>Candidate models</h2><button id="refresh-evaluation" type="button">Refresh inventory</button></div>
+      <div class="selection-actions"><button id="select-all-candidates" type="button">Select all</button><button id="clear-candidates" type="button">Clear</button></div>
+      <label class="coverage-filter-label" for="coverage-filter">Coverage</label>
+      <select id="coverage-filter"><option value="all">All</option><option value="incomplete">Incomplete</option><option value="rejected">Rejected</option><option value="never">Never evaluated</option><option value="evaluated">Evaluated</option><option value="control">Control only</option><option value="strict">Strict tested</option></select>
+      <div id="candidate-list" class="candidate-list" aria-label="Evaluation candidates"></div>
+    </aside>
+    <section class="main-column">
+      <article class="task-card"><h2>Fixed task: Plain-text control, then CodeBackendAdvisor routing</h2><p id="rubric-summary">Every candidate first receives one plain-text control. After an exact EVALUATION_OK response, it receives two strict routing trials.</p></article>
+      <div class="run-actions"><button id="run-evaluation" class="primary" type="button">Run evaluation</button><button id="cancel-evaluation" type="button" disabled>Cancel</button></div>
+      <section class="progress-panel"><h2>Progress</h2><p id="progress-status" role="status" aria-live="polite">Ready.</p><progress id="evaluation-progress" max="100" value="0"></progress></section>
+      <section class="summary-section"><div class="results-heading"><h2>Coverage summary</h2><span id="evaluation-verdict">Mixed</span></div><div id="coverage-summary" class="coverage-summary" aria-label="Model coverage summary"></div><div id="evaluation-summary"></div></section>
+      <section class="results-section"><div class="results-heading"><h2>Results</h2><span id="result-count">0 selected / 0 operations</span></div><div id="evaluation-results"><div class="empty-state">No trials yet. Select candidates and run the evaluation.</div></div></section>
+    </section>
+  </main>
+  <script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>`;
 }
 
 function getLearningHtml(webview, extensionUri) {
@@ -991,7 +1621,7 @@ function getLearningHtml(webview, extensionUri) {
                 <span id="learning-message">Loading Aro's scorecard...</span>
             </div>
         <section id="recommendations-view" class="view-panel">
-            <div class="toolbar"><div class="recommendations-heading"><h2>Learned recommendations</h2><div class="advisor-default"><label for="advisor-default-model">Aro &amp; advisors default</label><select id="advisor-default-model"></select></div></div><div class="recommendations-actions"><button id="open-model-inventory" type="button">Model Inventory</button><button id="refresh-learning" type="button">Refresh</button></div></div>
+            <div class="toolbar"><div class="recommendations-heading"><h2>Learned recommendations</h2><div class="advisor-default"><label for="advisor-default-model">Aro &amp; advisors default</label><select id="advisor-default-model"></select></div></div><div class="recommendations-actions"><button id="open-model-evaluation" type="button">Open Model Evaluation</button><button id="open-model-inventory" type="button">Model Inventory</button><button id="refresh-learning" type="button">Refresh</button></div></div>
             <fieldset class="scope-controls" id="model-scope"><legend>Model scope</legend><label><input type="radio" name="model-scope" value="cloud"> Cloud only</label><label><input type="radio" name="model-scope" value="local" disabled> Local only</label><label><input type="radio" name="model-scope" value="both" disabled> Both</label><label for="model-priority">Priority <select id="model-priority" disabled><option value="cloud-first">Cloud first</option><option value="local-first">Local first</option></select></label></fieldset>
             <fieldset class="workspace-preference" id="workspace-preference"><legend>Workspace model preference</legend><div class="preference-scope" role="radiogroup" aria-label="Preference scope"><label><input type="radio" name="preference-scope" id="preference-scope-profile" value="profile" checked> Profile</label><label><input type="radio" name="preference-scope" id="preference-scope-workspace" value="workspace"> Workspace</label></div><div class="preference-fields" id="workspace-preference-fields"><label>Provider <select id="workspace-provider"></select></label><label>Model <select id="workspace-model"></select></label><button id="clear-workspace-preference" type="button">Reset to profile</button></div><p id="workspace-preference-status" class="preference-status" aria-live="polite"></p></fieldset>
             <fieldset class="context-controls" id="learning-context"><legend>Filter recommendation table</legend><div class="activity-filter"><span id="domain-filter-label">Domain</span><div id="domain-tabs" class="activity-tabs" role="tablist" aria-labelledby="domain-filter-label"></div></div><div class="activity-filter"><span id="activity-filter-label">Activity</span><div id="activity-tabs" class="activity-tabs" role="tablist" aria-labelledby="activity-filter-label"></div></div></fieldset>
@@ -1007,3 +1637,4 @@ function getLearningHtml(webview, extensionUri) {
 function deactivate() { }
 
 module.exports = { activate, deactivate };
+

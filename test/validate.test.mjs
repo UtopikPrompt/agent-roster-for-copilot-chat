@@ -98,6 +98,11 @@ test('GovWebResearchAgent fetches supplied URLs with web/fetch independent of Se
     assert.deepEqual(metadata.agents, []);
     const procedure = text.split('## Research Procedure ')[1]?.split(/ ## /)[0];
     assert.ok(procedure, 'Missing research procedure');
+    assert.match(procedure, /Before SearXNG discovery, attempt the declared `web\/fetch` tool for every directly supplied public URL, regardless of whether SearXNG tools are exposed/);
+    assert.match(procedure, /This direct-fetch gate is independent of SearXNG; absent SearXNG tools do not make supplied-URL fetching blocked/);
+    assert.match(text, /The only direct-fetch blocker is absence of the declared `web\/fetch` capability\/tool/);
+    assert.match(text, /Absent SearXNG tools do not make direct URL fetching blocked/);
+    assert.match(text, /report BLOCKED with the exact missing capability\/tool or fetch service error/);
     assert.match(procedure, /Fetch every directly supplied public URL with the declared `web\/fetch` tool\. This does not depend on SearXNG/);
     assert.match(procedure, /use `web_url_read` only when that SearXNG tool is exposed/);
     assert.match(procedure, /only when its tool is actually exposed/);
@@ -286,10 +291,17 @@ test('Aro model learning is automatic, persistent, and has no manual benchmark U
     assert.match(extension, /vscode\.lm\.registerTool\('aroRecordModelOutcome'/);
     assert.match(extension, /context\.globalState\.update\(LEARNING_STORAGE_KEY/);
     assert.match(extension, /getContextualLearningDashboard/);
-    // Dashboard and provider availability pages each declare the same restrictive CSP.
-    assert.equal((extension.match(/img-src \$\{webview\.cspSource\}/g) || []).length, 2);
-    assert.doesNotMatch(extension, /message\.type === 'benchmark'/);
-    assert.doesNotMatch(extension, /model\.sendRequest/);
+    // Dashboard, provider availability, and dedicated evaluation pages declare the same restrictive CSP.
+    assert.equal((extension.match(/img-src \$\{webview\.cspSource\}/g) || []).length, 3);
+    assert.match(extension, /agentRoster\.runModelEvaluation/);
+    assert.match(extension, /evaluationCandidates\(availableInventory\)/);
+    assert.match(extension, /getProviderAvailabilityState\(context\)\.effective/);
+    assert.match(extension, /inventory\.filter\(model\s*=>\s*isProviderEnabled\(model\.vendor,\s*providerAvailability\)\)/);
+    assert.doesNotMatch(extension, /mistralShortlist|No Mistral-provider|Select Mistral-provider|customendpoint/i);
+    const modelEvaluation = await readFile(path.join(root, 'src/model-evaluation.js'), 'utf8');
+    assert.match(modelEvaluation, /function evaluationCandidates\(models, options = \{\}\)/);
+    assert.doesNotMatch(modelEvaluation, /mistralShortlist|customendpoint|family.*Mistral|providerId/i);
+    assert.match(extension, /model\.sendRequest/);
     assert.match(extension, /getManagedPricing\(model, policy\.localModelVendors, policy\.classifications, policy\.providerTypes, policy\.manualPriceTiers\)/);
     assert.match(extension, /selectModels\(availableModels, policy\.localModelVendors, policy\.classifications, scope/);
     assert.match(extension, /getModelsForTask: difficulty => selectModels\(summaries/);
@@ -320,7 +332,7 @@ test('Aro model learning is automatic, persistent, and has no manual benchmark U
     const advisorDefaultLabel = extension.indexOf('<label for="advisor-default-model">Aro &amp; advisors default</label>');
     const recommendationActions = extension.indexOf('<div class="recommendations-actions">');
     assert.ok(recommendationHeading >= 0 && advisorDefaultLabel > recommendationHeading && recommendationActions > advisorDefaultLabel);
-    assert.match(extension, /class="recommendations-actions"><button id="open-model-inventory" type="button">Model Inventory<\/button><button id="refresh-learning" type="button">Refresh<\/button>/);
+    assert.match(extension, /class="recommendations-actions"><button id="open-model-evaluation" type="button">Open Model Evaluation<\/button><button id="open-model-inventory" type="button">Model Inventory<\/button><button id="refresh-learning" type="button">Refresh<\/button>/);
     assert.match(extension, /<th>Provider<\/th><th>Model selection<\/th><th>Type<\/th><\/tr><\/thead><tbody id="providers">/);
     assert.doesNotMatch(extension, /provider-settings|provider-types|provider-controls/);
     const recommendationsViewIndex = extension.indexOf('id="recommendations-view"');
@@ -335,7 +347,17 @@ test('Aro model learning is automatic, persistent, and has no manual benchmark U
     assert.match(dashboard, /vscode\.postMessage\(\{ type: 'ready' \}\)/);
     assert.match(dashboard, /recommendedModelId/);
     assert.doesNotMatch(dashboard, /toggle-inventory/);
-    assert.doesNotMatch(dashboard, /sendRequest|benchmark|textarea|scorecard.*set/i);
+    assert.doesNotMatch(dashboard, /textarea|scorecard.*set/i);
+    assert.match(dashboard, /openModelEvaluation/);
+    assert.doesNotMatch(dashboard, /run-model-evaluation|runModelEvaluation/);
+    const inventoryHtml = extension.match(/function getModelInventoryHtml[\s\S]*?return `<!DOCTYPE html>/);
+    assert.doesNotMatch(inventoryHtml?.[0] || '', /never-match-this-marker/);
+    assert.match(extension, /id="open-model-evaluation" type="button">Open Model Evaluation<\/button>/);
+    assert.match(extension, /message\.type === 'openModelEvaluation'/);
+    assert.match(extension, /openModelEvaluation\(context, candidates\)/);
+    assert.doesNotMatch(extension, /if \(message\.type === 'runModelEvaluation'\)\s*\{[\s\S]*?executeCommand\('agentRoster\.runModelEvaluation'\)/);
+    assert.doesNotMatch(extension.match(/function getLearningHtml[\s\S]*?function deactivate/)?.[0] || '', /id="run-model-evaluation"|>Run evaluation<|>Model evaluation<\/h2>/);
+    assert.ok(manifest.contributes.commands.some(command => command.command === 'agentRoster.runModelEvaluation'));
     const dashboardStyles = await readFile(path.join(root, 'media/model-learning-dashboard.css'), 'utf8');
     assert.match(dashboardStyles, /\.context-controls\s*\{[^}]*flex-direction:\s*column/);
     assert.match(dashboardStyles, /\.recommendations-heading\s*\{[^}]*flex-direction:\s*column/);
@@ -474,7 +496,7 @@ test('sidebar quick controls and status follow saved model policy and outcomes',
     assert.equal(row('Advisor model').description, 'Learned recommendation');
     assert.equal(row('Selected models').description, '1 cloud / 1 local');
     assert.equal(row('Unclassified selected').description, '1');
-    assert.equal(row('Unrated local').description, '0');
+    assert.equal(row('Unrated local').description, '1');
     assert.equal(row('Outcomes').description, '0');
     assert.equal(row('Latest context').description, 'No recorded outcomes');
     nextChoice = 'local';
@@ -677,7 +699,8 @@ test('inventory changes persist and affect dashboard and recommendation tool', a
         scope: 'local-first',
         providerTypes: { copilotcli: 'local' },
         classifications: { '["copilotcli","cli"]': 'local' },
-        selections: { '["copilotcli","cli"]': false }
+        selections: { '["copilotcli","cli"]': false },
+        capabilityTiers: { '["copilot","cloud"]': 'standard' }
     });
     state.set('agentRoster.modelLearning.manualSelections.v1', [{
         activity: 'operate', domain: 'github-workflow', difficulty: 'standard', modelId: 'cloud', vendor: 'copilot'
@@ -806,7 +829,7 @@ test('inventory changes persist and affect dashboard and recommendation tool', a
     panel.receive({ type: 'setModelScope', scope: 'both' });
     dashboard = await response;
     assert.equal(dashboard.scope, 'both');
-    assert.equal(dashboard.dashboard.find(row => row.activity === 'implement' && row.domain === 'coding' && row.difficulty === 'simple').recommendedModelId, 'cloud');
+    assert.equal(dashboard.dashboard.find(row => row.activity === 'implement' && row.domain === 'coding' && row.difficulty === 'simple').recommendedModelId, 'local');
     response = nextDashboard();
     panel.receive({ type: 'chooseManualModel', activity: 'implement', domain: 'coding', difficulty: 'simple' });
     dashboard = await response;
@@ -882,7 +905,7 @@ test('inventory changes persist and affect dashboard and recommendation tool', a
     assert.equal(contextualRecommendation.difficulty, 'standard');
     assert.equal(contextualRecommendation.recommendedModelId, 'local');
     assert.equal(dashboard.dashboard.find(row => row.activity === 'implement' && row.domain === 'coding' && row.difficulty === 'complex').recommendedModelId, null);
-    assert.equal(dashboard.dashboard.find(row => row.activity === 'implement' && row.domain === 'coding' && row.difficulty === 'complex').eligibleCount, 1);
+    assert.equal(dashboard.dashboard.find(row => row.activity === 'implement' && row.domain === 'coding' && row.difficulty === 'complex').eligibleCount, 0);
     const complexResult = await tools.get('aroGetModelRecommendations').invoke({ input: { role: 'coding', taskCategory: 'complex' } });
     assert.equal(JSON.parse(complexResult.content[0].value).modelPriority, 'local-first');
     assert.equal(JSON.parse(complexResult.content[0].value).recommendedModelId, null);
@@ -939,13 +962,13 @@ test('inventory changes persist and affect dashboard and recommendation tool', a
     dashboard = await catalogChange({ type: 'setModelSelected', id: 'cloud', vendor: 'copilot', selected: false });
     assert.equal(dashboard.dashboard.find(row => row.activity === 'implement' && row.domain === 'coding' && row.difficulty === 'simple').recommendedModelId, 'unpriced');
     dashboard = await catalogChange({ type: 'setManualPriceTier', id: 'unpriced', vendor: 'copilot', tier: 'unpriced' });
-    assert.equal(dashboard.dashboard.find(row => row.activity === 'implement' && row.domain === 'coding' && row.difficulty === 'simple').recommendedModelId, null);
+    assert.equal(dashboard.dashboard.find(row => row.activity === 'implement' && row.domain === 'coding' && row.difficulty === 'simple').recommendedModelId, 'unpriced');
     models.push(...Array.from({ length: 60 }, (_, index) => ({
         id: `additional-${index}`, name: `Additional ${index}`, vendor: 'copilot', inputCost: 10, outputCost: 50
     })));
     const compactResult = await tools.get('aroGetModelRecommendations').invoke({ input: { role: 'coding', taskCategory: 'simple' } });
     const compact = JSON.parse(compactResult.content[0].value);
-    assert.equal(compact.eligibleCount, 60);
+    assert.equal(compact.eligibleCount, 61);
     assert.equal(compact.unpricedCount, 1);
     assert.equal(compact.truncated, true);
     assert.ok(compact.candidates.length <= 8);
@@ -993,6 +1016,7 @@ async function loadWorkspacePreferenceHarness({ workspaceFolders, workspaceValue
     });
     const models = [
         { id: 'cloud', name: 'Cloud', vendor: 'copilot', inputCost: 10, outputCost: 50 },
+        { id: 'unknown-price', name: 'Unknown Price', vendor: 'copilot' },
         { id: 'cli', name: 'CLI', vendor: 'copilotcli', inputCost: 20, outputCost: 100 },
         { id: 'local', name: 'Local', vendor: 'ollama' }
     ];
@@ -1077,6 +1101,7 @@ test('workspace preference is read from workspace values only and reported in th
     assert.equal(preference.providerAvailable, true);
     assert.equal(preference.modelAvailable, true);
     assert.ok(preference.providers.find(provider => provider.vendor === 'copilot').models.some(model => model.id === 'cloud'));
+    assert.ok(preference.providers.find(provider => provider.vendor === 'copilot').models.some(model => model.id === 'unknown-price'));
 
     const profile = await loadWorkspacePreferenceHarness({ workspaceFolders: [{ name: 'repo' }] });
     const unset = (await profile.send({ type: 'ready' })).workspacePreference;
@@ -1179,7 +1204,7 @@ test('learning webview sends scope, priority, and recommendation changes', async
         append(...children) { this.children.push(...children); }
         replaceChildren() { this.children = []; }
     }
-    for (const id of ['models', 'model-search', 'model-count', 'model-count-label', 'provider-policy-note', 'show-excluded', 'open-model-inventory', 'recommendations', 'recommendations-panel', 'recommendations-view', 'inventory-view', 'view-tabs', 'learning-status', 'learning-message', 'refresh-learning', 'advisor-default-model', 'model-scope', 'model-priority', 'providers', 'activity-tabs', 'domain-tabs', 'context-count', 'context-activity-heading', 'context-domain-heading', 'context-difficulty-heading', 'preference-scope-profile', 'preference-scope-workspace', 'workspace-preference-fields', 'workspace-provider', 'workspace-model', 'clear-workspace-preference', 'workspace-preference-status']) {
+    for (const id of ['models', 'model-search', 'model-count', 'model-count-label', 'provider-policy-note', 'show-excluded', 'open-model-evaluation', 'open-model-inventory', 'recommendations', 'recommendations-panel', 'recommendations-view', 'inventory-view', 'view-tabs', 'learning-status', 'learning-message', 'refresh-learning', 'advisor-default-model', 'model-scope', 'model-priority', 'providers', 'activity-tabs', 'domain-tabs', 'context-count', 'context-activity-heading', 'context-domain-heading', 'context-difficulty-heading', 'preference-scope-profile', 'preference-scope-workspace', 'workspace-preference-fields', 'workspace-provider', 'workspace-model', 'clear-workspace-preference', 'workspace-preference-status']) {
         elements.set(id, new Element());
     }
     const scopeControls = ['cloud', 'local', 'both'].map(value => Object.assign(new Element(), { name: 'model-scope', value }));
@@ -1305,7 +1330,8 @@ test('advisor default pin is validated, cleared, and yields to manual overrides'
         providerTypes: { ollama: 'local', copilotcli: 'cloud' },
         classifications: {},
         selections: {},
-        localTiers: { '["ollama","local"]': 'simple' }
+        localTiers: { '["ollama","local"]': 'simple' },
+        capabilityTiers: { '["copilot","cloud"]': 'high', '["copilotcli","cli"]': 'high' }
     });
     const models = [
         { id: 'cloud', name: 'Cloud', vendor: 'copilot', inputCost: 10, outputCost: 50 },

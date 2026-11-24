@@ -29,11 +29,18 @@ or delegate. Orchestrator alone passes findings to another worker.
   links, or fetch private/local network resources.
 - Missing runtime tools or an unreachable service are blockers, not permission
   to use shell commands, discover client profiles, or change MCP configuration.
-  Return BLOCKED with the exact missing capability or service error, without
-  secret values. Local instructions cannot make remote MCP tools available.
+  The only direct-fetch blocker is absence of the declared `web/fetch`
+  capability/tool. Absent SearXNG tools do not make direct URL fetching blocked.
+  If `web/fetch` is absent or a fetch service errors, report BLOCKED with the
+  exact missing capability/tool or fetch service error, without secret values.
+  Local instructions cannot make remote MCP tools available.
 
 ## Research Procedure
-1. Discovery is separate from fetching. Use a SearXNG search tool (for example
+1. Before SearXNG discovery, attempt the declared `web/fetch` tool for every
+   directly supplied public URL, regardless of whether SearXNG tools are
+   exposed. This direct-fetch gate is independent of SearXNG; absent SearXNG
+   tools do not make supplied-URL fetching blocked.
+2. Discovery is separate from fetching. Use a SearXNG search tool (for example
    `searxng_web_search` with the required `query` parameter) only when its tool
    is actually exposed in this runtime; do not infer availability from this
    definition. Begin with a small relevant result set and refine only to resolve
@@ -41,19 +48,19 @@ or delegate. Orchestrator alone passes findings to another worker.
    and upstream issue discussions. If no SearXNG search tool is exposed, mark
    search-dependent work BLOCKED with that missing capability and continue with
    any supplied URLs. Never use `azure-mcp/search` as public web search.
-2. When exposed, use `searxng_instance_info` for engine/category capabilities.
+3. When exposed, use `searxng_instance_info` for engine/category capabilities.
    Do not guess supported engines; combine explicit engines and time ranges only
    when those engines advertise time-range support.
-3. Fetch every directly supplied public URL with the declared `web/fetch` tool.
+4. Fetch every directly supplied public URL with the declared `web/fetch` tool.
    This does not depend on SearXNG. Fetch relevant search-result URLs the same
    way; use `web_url_read` only when that SearXNG tool is exposed. A search
    snippet alone is not verified source content. Bound output with section
    extraction or pagination.
-4. Check publication/update dates and version applicability. Distinguish the
+5. Check publication/update dates and version applicability. Distinguish the
    retrieval date from the source date; undated material has unknown freshness.
    For consequential or disputed claims, seek independent corroboration and
    explain disagreements. Stop when the requested evidence is sufficient.
-5. If a page cannot be fetched, or a URL is refused by the safety rules above,
+6. If a page cannot be fetched, or a URL is refused by the safety rules above,
    mark it unverified and try another relevant source. Do not bypass access
    controls or silently replace unavailable web research with recollection.
    Report partial evidence and remaining gaps explicitly.

@@ -218,48 +218,25 @@
             const provider = cellWith(`${model.vendor} / ${model.family} (${model.version})`);
             if (model.excluded) appendExcludedStatus(provider);
             const tier = document.createElement('td');
-            if (model.kind === 'local') {
-                const select = document.createElement('select');
-                select.setAttribute('aria-label', `Capability tier for ${model.name} (${model.vendor})`);
-                for (const [value, label] of [['unrated', 'Unrated'], ['simple', 'Low (simple)'], ['standard', 'Medium (standard)'], ['complex', 'High (complex)']]) {
-                    const option = document.createElement('option');
-                    option.value = value;
-                    option.textContent = label;
-                    select.append(option);
-                }
-                select.value = model.localTier;
-                select.addEventListener('change', () => postCatalog({ type: 'setLocalTier', id: model.id, vendor: model.vendor, tier: select.value }, 'Saving local model tier...'));
-                tier.append(select);
-            } else if (['unpriced', 'manual'].includes(model.pricing?.source)) {
-                const priceSelect = document.createElement('select');
-                priceSelect.setAttribute('aria-label', `Price tier for ${model.name} (${model.vendor})`);
-                for (const [value, label] of [['unpriced', 'Unpriced'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]) {
-                    const option = document.createElement('option');
-                    option.value = value;
-                    option.textContent = label;
-                    priceSelect.append(option);
-                }
-                priceSelect.value = model.pricing.budgetClass;
-                priceSelect.addEventListener('change', () => postCatalog({ type: 'setManualPriceTier', id: model.id, vendor: model.vendor, tier: priceSelect.value }, 'Saving manual price tier...'));
-                tier.append(priceSelect);
-            } else {
-                tier.textContent = model.pricing?.budgetClass || 'unpriced';
-            }
+            tier.textContent = `${model.capabilityTier || model.localTier || 'unrated'} | ${model.evidenceStatus || 'unknown'} | ${model.evidenceSourceCount || 0} sources`;
+            tier.title = (model.evidenceSources || []).join(', ') || 'No capability evidence';
             const rates = [
                 `In ${model.pricing?.inputCost ?? '-'}`,
                 `Out ${model.pricing?.outputCost ?? '-'}`,
                 `Cache ${model.pricing?.cacheCost ?? '-'}`,
                 `Write ${model.pricing?.cacheWriteCost ?? '-'}`
             ];
-            const source = model.pricing?.source === 'vscode'
-                ? 'Native'
-                : model.pricing?.source === 'snapshot'
-                    ? `Snapshot ${model.pricing.snapshotDate}`
-                    : model.pricing?.source === 'local'
-                        ? 'Local (no token charge)'
-                        : model.pricing?.source === 'manual'
-                            ? 'Manual tier'
-                            : 'Unavailable';
+            const source = model.pricing?.budgetClass === 'unpriced' || model.pricing?.source === 'unpriced'
+                ? 'Unknown'
+                : model.pricing?.source === 'vscode'
+                    ? 'Native'
+                    : model.pricing?.source === 'snapshot'
+                        ? `Snapshot ${model.pricing.snapshotDate}`
+                        : model.pricing?.source === 'local'
+                            ? 'Local (no token charge)'
+                            : model.pricing?.source === 'manual'
+                                ? 'Manual tier'
+                                : 'Unknown';
             body.append(emptyOrRow(use, name, provider, tier, cellWith(rates.join(' / ')), cellWith(source)));
         }
     }
@@ -328,6 +305,14 @@
 
     byId('model-search').addEventListener('input', renderCatalog);
     byId('show-excluded').addEventListener('change', renderCatalog);
+    byId('open-model-evaluation').addEventListener('click', () => {
+        const candidates = catalog
+            .filter(model => model.selected)
+            .map(model => ({ id: model.id, vendor: model.vendor }))
+            .filter(candidate => typeof candidate.id === 'string' && candidate.id.trim() && typeof candidate.vendor === 'string' && candidate.vendor.trim());
+        setStatus('Opening model evaluation...', 'is-loading');
+        vscode.postMessage({ type: 'openModelEvaluation', candidates });
+    });
     window.addEventListener('message', event => {
         const message = event.data;
         if (message.type === 'providerAvailability') {

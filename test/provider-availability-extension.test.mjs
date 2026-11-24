@@ -19,6 +19,8 @@ async function loadProviderHarness({ folder = true, workspaceValues = {}, global
     const state = new Map();
     const updates = [];
     const errors = [];
+    const warnings = [];
+    const quickPicks = [];
     const posted = [];
     const panels = [];
     let panel;
@@ -58,8 +60,8 @@ async function loadProviderHarness({ folder = true, workspaceValues = {}, global
         },
         window: {
             registerTreeDataProvider: () => ({ dispose() {} }),
-            showQuickPick: async () => undefined,
-            showWarningMessage: () => Promise.resolve(undefined),
+            showQuickPick: async (choices, options) => { quickPicks.push({ choices, options }); return undefined; },
+            showWarningMessage: message => { warnings.push(message); return Promise.resolve(undefined); },
             showErrorMessage: message => { errors.push(message); },
             createWebviewPanel: () => {
                 panel = {
@@ -107,6 +109,8 @@ async function loadProviderHarness({ folder = true, workspaceValues = {}, global
         state: { get: key => plain(state.get(key)) },
         updates,
         errors,
+        warnings,
+        quickPicks,
         workspaceValues,
         panels,
         posted,
@@ -290,11 +294,35 @@ test('Model Learning shows recommendations only and links to the Model Inventory
     const html = harness.panel.webview.html;
     assert.doesNotMatch(html, /view-tabs|inventory-view|show-excluded|id="model-count"/);
     assert.match(html, /<button id="open-model-inventory" type="button">Model Inventory<\/button>/);
+    assert.match(html, /<button id="open-model-evaluation" type="button">Open Model Evaluation<\/button>/);
     await harness.send({ type: 'openModelInventory' });
     assert.deepEqual(harness.executed, ['agentRoster.openModelInventory']);
     const script = await readFile(path.join(root, 'media/model-learning-dashboard.js'), 'utf8');
     assert.doesNotMatch(script, /excludedModels|show-excluded|view-tabs|renderModels|renderProviders/);
     assert.match(script, /postMessage\(\{ type: 'openModelInventory' \}\)/);
+});
+
+test('Model Inventory opens the dedicated evaluation page with exact candidates', async () => {
+    const harness = await loadProviderHarness();
+    const html = harness.panel.webview.html;
+    assert.match(html, /id="open-model-evaluation"[^>]*>Open Model Evaluation<\/button>/);
+    await harness.send({ type: 'openModelEvaluation', candidates: [{ id: 'cloud', vendor: 'copilot' }] });
+    assert.deepEqual(harness.executed, ['agentRoster.openModelEvaluation']);
+    assert.ok(!harness.executed.includes('agentRoster.runModelEvaluation'));
+    assert.equal(harness.quickPicks.length, 0);
+});
+
+test('inventory stale candidates do not open a QuickPick', async () => {
+    const harness = await loadProviderHarness();
+    await harness.send({ type: 'openModelEvaluation', candidates: [{ id: 'removed', vendor: 'copilot' }] });
+    assert.deepEqual(harness.executed, ['agentRoster.openModelEvaluation']);
+    assert.equal(harness.quickPicks.length, 0);
+});
+
+test('Model Evaluation command fallback retains the quick picker', async () => {
+    const harness = await loadProviderHarness();
+    await harness.invoke('agentRoster.runModelEvaluation');
+    assert.equal(harness.quickPicks.length, 1);
 });
 
 test('opening the Model Inventory again reveals the open panel instead of creating another', async () => {
@@ -398,6 +426,8 @@ async function loadScopeTabsScript() {
     add('catalog-scope');
     add('provider-policy-note');
     add('model-count-label');
+    add('open-model-evaluation');
+    add('run-model-evaluation');
     add('providers');
     add('models');
     const tabs = add('scope-tabs');
@@ -422,6 +452,7 @@ async function loadScopeTabsScript() {
     return {
         posted,
         tab: scope => elements.get(`scope-tab-${scope}`),
+        openEvaluation: () => elements.get('open-model-evaluation'),
         scopeVisible: scope => !elements.get(`${scope}-scope`).hidden,
         tabsElement: tabs,
         receive: data => listeners.message({ data })
@@ -431,6 +462,23 @@ async function loadScopeTabsScript() {
 test('the webview script switches Global and Workspace tabs from clicks, arrow keys, and reveal messages', async () => {
     const page = await loadScopeTabsScript();
     assert.deepEqual(plain(page.posted), [{ type: 'ready' }]);
+    page.receive({
+        type: 'providerAvailability',
+        inventoryError: '',
+        providers: [],
+        global: { disabledProviders: [] },
+        workspace: { mode: 'inherit', enabledProviders: [] },
+        effective: { summary: 'All providers enabled' },
+        hasWorkspace: false,
+        catalog: [
+            { id: 'cloud', name: 'Cloud', vendor: 'copilot', family: 'Family', version: '1', selected: true, enabled: { global: true, workspace: true } },
+            { id: 'local', name: 'Local', vendor: 'ollama', family: 'Family', version: '1', selected: false, enabled: { global: true, workspace: true } }
+        ],
+        providerTypes: {},
+        lockedProviders: []
+    });
+    page.openEvaluation().dispatch('click');
+    assert.deepEqual(plain(page.posted), [{ type: 'ready' }, { type: 'openModelEvaluation', candidates: [{ id: 'cloud', vendor: 'copilot' }] }]);
     assert.equal(page.scopeVisible('global'), true);
     assert.equal(page.scopeVisible('workspace'), false);
 

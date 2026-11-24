@@ -135,6 +135,13 @@ function modelKey(model) {
     return JSON.stringify([model.vendor, model.id]);
 }
 
+function getCapabilityTier(model, options = {}) {
+    const key = modelKey(model);
+    const tiers = options.capabilityTiers || options.localTiers || {};
+    const tier = String(tiers[key] || 'unrated').toLowerCase();
+    return ['unrated', 'simple', 'standard', 'complex', 'high'].includes(tier) ? tier : 'unrated';
+}
+
 function modelKind(model, localModelVendors, classifications = {}, providerTypes = {}) {
     if (isCopilotCloudVendor(model.vendor)) return 'cloud';
     const explicit = classifications[modelKey(model)];
@@ -175,7 +182,7 @@ function getInventorySummary(models, policy) {
         cloudCount: selected.filter(model => modelKind(model, policy.localModelVendors, policy.classifications, policy.providerTypes) === 'cloud').length,
         localCount: localModels.length,
         unknownCount: selected.filter(model => modelKind(model, policy.localModelVendors, policy.classifications, policy.providerTypes) === 'unknown').length,
-        unratedLocalCount: localModels.filter(model => !['simple', 'standard', 'complex'].includes(policy.localTiers[modelKey(model)])).length
+        unratedLocalCount: localModels.filter(model => getCapabilityTier(model, policy) === 'unrated').length
     };
 }
 
@@ -187,10 +194,12 @@ function selectModels(models, localModelVendors, classifications, scope, options
         if (scope === 'cloud' || scope === 'local') {
             if (kind !== scope) return false;
         }
-        if (kind === 'local' && options.taskCategory) {
-            const tiers = ['simple', 'standard', 'complex'];
-            const tier = (options.localTiers || {})[modelKey(model)];
-            return tiers.indexOf(tier) >= tiers.indexOf(options.taskCategory) && tiers.includes(options.taskCategory);
+        if (options.taskCategory) {
+            const tier = getCapabilityTier(model, options);
+            const task = options.taskCategory;
+            const rank = { unrated: 0, simple: 1, standard: 2, complex: 3, high: 4 };
+            const required = { simple: 0, standard: 2, complex: 3 }[task];
+            if (typeof required === 'number' && rank[tier] < required) return false;
         }
         return true;
     });
@@ -208,4 +217,4 @@ function getManagedPricing(model, localModelVendors, classifications, providerTy
     return pricing;
 }
 
-module.exports = { PRICE_SNAPSHOT_DATE, classifyPrice, effectiveModelScope, getInventorySummary, getManagedPricing, getModelPricing, getSelectionPricing, hasSelectedLocalModel, isCopilotCloudVendor, isModelSelected, modelClassification, modelKey, modelKind, normalizeModelName, selectModels, selectModelVendors };
+module.exports = { PRICE_SNAPSHOT_DATE, classifyPrice, effectiveModelScope, getCapabilityTier, getInventorySummary, getManagedPricing, getModelPricing, getSelectionPricing, hasSelectedLocalModel, isCopilotCloudVendor, isModelSelected, modelClassification, modelKey, modelKind, normalizeModelName, selectModels, selectModelVendors };

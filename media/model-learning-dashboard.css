@@ -99,6 +99,14 @@ button:disabled {
     gap: 12px;
 }
 
+.catalog-toolbar-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
 .page-tabs {
     border-bottom: 1px solid var(--border);
     display: flex;
