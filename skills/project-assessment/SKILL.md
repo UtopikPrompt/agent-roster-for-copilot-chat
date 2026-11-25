@@ -9,9 +9,14 @@ Use within the current agent's tool list and the user's authorized scope. This s
 
 ## Scope and Target
 
-- The target is the project open at invocation. If none is open, ask for one. Never hard-code a target.
-- Declare the scope before collection: target root, approved sources, containers or areas, and exclusions. Ask only for critical scope or access decisions.
-- Report assessment output under the target project only when Aro has confirmed the target root and write paths with the user and dispatches `GovDocumentationSuiteGenerator`. Otherwise return the complete content in the response. Writing is never performed by this skill or by analysis workers.
+- P0 target root is the open workspace folder/repository root and, for project-assessment documents, the destination root; never the active file directory or a guessed subfolder. A prior assessment folder that no longer exists does not invalidate the current open workspace destination. For an open-project assessment, use that root unless the user explicitly names a different destination. Never reinterpret open project as a collection source. With multiple folders, ask at most one question naming every folder if destination ambiguity remains.
+- At P0, create or choose one unique `<run-root>` beneath the target root for the entire assessment: `<target-root>/docs/project-assessment/<run-id>/`. Reuse and pass that exact run root through P2 collectors, P3/P4/P5, the modernization chain, checkpoints, and P7. Per-source and per-phase files are nested beneath it (`evidence/ado`, `evidence/local`, `phases/p5`, `checkpoints/`); no sibling run folders or top-level phase-suffix directories are allowed. Resume continues the existing run root; a new assessment creates a different unique run root.
+- P1 establishes only that the exact open destination is readable and usable, and that the local collector has `read` and `search`. It must not require repository manifests or a README for a valid empty workspace. Recognized source identity signals such as `package.json`, `README.md`, `*.sln`, `*.slnx`, `*.csproj`, `pom.xml`, `build.gradle`, `build.gradle.kts`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `composer.json`, or clearly bounded solution/repository metadata are optional P2 evidence metadata, not P1 prerequisites.
+- P1 reads/searches only the exact target root. Preserve user-supplied source IDs and URLs as scope. After required advisor selection, dispatch each explicitly named remote collector independently so it can inspect only its own declared runtime tool list; it may return source-local `BLOCKED` if tools or read-only behavior are absent. Never require the user to supply an inventory.
+- Preserve all user-supplied data sources and identifiers exactly, including SharePoint URLs, Azure DevOps projects/teams, GitHub repositories, and source names. The exact source URLs/identifiers in the prompt define in-scope sources without follow-up. Do not ask again for project names or organization URLs already supplied. A scope declaration or identifier is not evidence that collection occurred.
+- No-inventory routine: a source name or identifier alone is not evidence of bound tools. Do not ask for routine tool names, project names, scopes, resource URLs, secrets, or source identifiers. After required advisor selection, dispatch each remote collector independently. It inspects only its own declared tool list and reports source-local `BLOCKED` if tools or read-only behavior are absent. Do not inspect arbitrary MCP configuration or expand tools. Authentication or server availability is context only, never proof of read-only capability. Mark blocked source areas NOT ASSESSED and continue other sources; report each distinct blocker once without serial prompts.
+- Declare the scope after one critical target clarification if needed. Otherwise declare the open local target and proceed; approved remote sources are not inferred from names alone.
+- Report assessment output under the target project only when Aro has confirmed the target root and write paths with the user and dispatches `GovDocumentationSuiteGenerator`. Otherwise return the complete content in the response. Writing is never performed by this skill or by analysis workers. A short/default assessment of an unambiguous open project proceeds on local evidence without remote-source intake.
 
 ## Dimensions
 
@@ -23,7 +28,19 @@ Assess each approved dimension, and mark a dimension as not assessed when its ev
 - business requirements
 - issues and work items
 - delivery and project-management practices
+- team constitution
 - strengths and weaknesses
+
+### Team Constitution
+
+Team constitution is in scope by default when evidence is available. It includes formal teams, members, roles and accountability, ownership, delivery/release/QA/security/production responsibilities, capacity and operating model, and on-call or approver relationships.
+
+- Classify each conclusion as `observed`, `asserted`, `inferred`, `contradicted`, or `UNKNOWN`, and keep the source basis visible.
+- An ADO membership or assignment alone does not prove role authority or delivery ownership. A formal team name also does not prove responsibility for an application or release.
+- Do not invent an org chart, role, owner, approver, capacity, team responsibility, or on-call relationship.
+- Every organization or ownership conclusion cites `evidence_id` where evidence exists. Unsupported conclusions are `INFERRED` or `UNKNOWN`/NOT ASSESSED; mark evidence gaps explicitly.
+- Contradictory records remain visible with their `evidence_id` values. A source that is `BLOCKED`, `DENIED`, `ERROR`, or `EMPTY` does not make the missing constitution fact negative evidence.
+- Team constitution adds no routine clarification or inventory question. Use supplied evidence and continue with explicit unknowns.
 
 ## Assessment Process
 
@@ -31,9 +48,14 @@ Run these stages in order. Each stage records its outputs and limits before the 
 
 ### Scope and Intake
 
-- Confirm the target root and declare the scope: approved sources, containers or workload boundaries, exclusions, and who can validate each area (names only when supplied).
+- Confirm P0 destination root before P2. For exactly one open workspace folder, use that repository root directly. For multiple folders, ask at most once naming the folders if destination ambiguity remains. For no open folder, ask once for the target repository/destination. Never derive the destination from the active file or from a supplied remote source URL. For the open-project short trigger, retain supplied remote source identifiers in scope but do not ask routine scope or setup questions; use the local collector and record remote families COLLECTABLE only if exact inventory matches, otherwise BLOCKED or PARTIAL.
+- Run P1 before D0-D6 local discovery. P1 may perform only a bounded accessibility check and root-bounded tool verification in the exact destination; a repository root signal is optional and never a reason to stop P1. P2 may then search likely evidence locations and use any recognized source manifest it finds. Never scan parent/child paths or the whole repository to repair or invent destination identity; an empty destination continues as EMPTY/PARTIAL evidence, not NEEDS_INPUT.
+- Accept prior evidence only when the user supplied it. Check each prior batch against the reuse eligibility rules in [project-evidence-ingestion](../project-evidence-ingestion/SKILL.md). A batch with canonical batch and coverage records resumes at P3, or at P5 when a P4 gate result for the same run is also supplied. Unchanged reused evidence is not re-collected; changed, missing, or inaccessible items return to P2 as targeted collection. Prior reports are prior-report context only.
+- A prior SQLite source is P2 evidence only after the user confirms one exact DB path through the picker. The current open workspace remains the target/output root and owns one run root; the DB remains a separate source declaration and never becomes an output root or source of implied sibling discovery. Call only `aro_read_prior_assessment_store` with `operation`, optional `query`, `cursor`, and `pageSize` 1-20. Never pass a path, SQL, wildcard, directory, or sibling path. It provides FTS5 extracted text, not a vector index or comprehensive inventory. Bounded search may return conservative best-effort redacted excerpts; listing returns no raw excerpt. Merge only complete matching pages under one stable batch ID; otherwise retain PARTIAL/UNKNOWN and the navigation queue. Adjacent manifests are UNVERIFIED unless cryptographically bound. Never write the DB, sidecars, source folders, or analysis folders; retain reports/checkpoints under the run root.
+- If the user says ingested documents already exist in the open repository and supplies source URLs/IDs, dispatch the local collector to search the repository for those source artifacts. A continuation prompt means resume prior assessment work rather than start blank. The exact open target and report destination remain the current workspace/repository root unless the user names a different target. Reuse readable corpus exports, normalized records, manifests, and prior completed analysis outputs found locally; prior report documents are context only and never primary evidence. Never ask again for target, source URLs, tool names, credentials, or canonical IDs when the prompt supplies these values. This statement is an instruction, not evidence: existence and completeness must be verified locally. Search likely evidence directories and Markdown/PDF/JSON/CSV/manifest exports without demanding a batch_id. If readable records exist, analyze them as PARTIAL/UNKNOWN coverage and continue the downstream chain with explicit constraints. Previous assessment README/summary/decision/report-package files are excluded unless the user explicitly names them as source documents.
 - Write the source plan: for each source, its intended canonical `retrieval_mode` (see Ingestion Modes and Capabilities) and what that mode can and cannot show. A source with no confirmed mode is recorded as `UNKNOWN`.
-- Ask only for critical scope or access decisions.
+- Ask at most one critical clarification, only when the target root is absent or the request names a different target. Do not ask routine tool, source, project, scope, URL, or secret questions.
+- For a constrained continuation, permit partial P5/P6 when readable current or prior evidence remains. A remote source that is unavailable remains BLOCKED and is not a reason to discard readable evidence or stop the full downstream package. An unreadable continuation affects only that source and related claims. Continue P3-P6 with other verified sources or prior valid records. A source that has no readable normalized records is NOT ASSESSED; report limitations and unknowns explicitly and never claim completeness or a final go/no-go. If zero valid records exist, produce status-only P6 deliverables with no fabricated findings or GO decision.
 
 ### Ingestion and Discovery
 
@@ -46,6 +68,7 @@ Run these stages in order. Each stage records its outputs and limits before the 
 - Record the point-in-time or version of each source. The assessment describes the evidence as of that point; newer performance or configuration data can change it.
 - Record coverage against a declared denominator, or `UNKNOWN`. List missing fields per record and per workload. A missing field is a gap, never a zero.
 - Keep duplicates and conflicting records visible with each `evidence_id`. Do not resolve a conflict by choosing a side without evidence.
+- Prior-report context is never normalized into the record set and never receives an `evidence_id`.
 - A successful import shows only that the import succeeded. It is not evidence of completeness; completeness requires a declared denominator.
 
 ### Dependency Discovery and Validation
@@ -74,7 +97,7 @@ Run these stages in order. Each stage records its outputs and limits before the 
 ### Report, Read-Back, and Validation
 
 - Draft the report package under Report Package. Each claim cites `evidence_id` values or is labeled as an unknown, an assumption, or `proposed`.
-- Persist only under the explicit save gate in the plan. Read back each file at the same version and check links and evidence citations.
+- Persist the package by default beneath the exact P0 run root for a normal full assessment. The writer receives the confirmed target root and exact run root; never choose a new run ID or never invent a fresh run root midway. Never overwrite an existing directory or package file. A no-overwrite conflict is reported and the existing content is preserved. An explicit don't-save or chat-only override stays in chat. An explicit alternate destination replaces the default. Read back every file at the same version and verify content, links, IDs/citations, and package completeness.
 - Record checks run and checks not run in `validation-log.md`. Independent review is outside this skill.
 
 ## Ingestion Modes and Capabilities
@@ -292,15 +315,22 @@ The package below is a proposed synthesis for this project. It is not an officia
 Rules:
 
 - Filenames are stable across revisions. Revision data lives in document metadata.
-- Existing files in the target root are preserved. Conflicts are reported, not overwritten.
+- Existing files and directories are preserved. Never overwrite; report a conflict and leave existing content unchanged.
+- Default save root: the exact P0 run root `<open-target-root>/docs/project-assessment/<run-id>/`. A normal full assessment authorizes this write by standing instruction; explicit don't-save/chat-only or an alternate destination overrides it. The P7 writer receives this run root and must not choose a new run ID or sibling folder. Nested evidence, `phases/`, `checkpoints/`, Markdown reports, and `executive-decision.html` all stay beneath it.
+- Partial and BLOCKED assessments still create every package artifact, including the standalone executive HTML, even when evidence is absent. Partial and BLOCKED assessments use accurate PARTIAL/BLOCKED/NOT ASSESSED status, scope, limitations, exact missing sources/reasons, and concrete next evidence/steps. If zero valid records exist, create a status-only package with no fabricated findings or GO decision. Never create a product go/no-go claim without evidence.
 - Mark a business section NOT ASSESSED when its sources are absent. Do not invent a requirement.
 - Technical package: the Markdown files above carry the detailed technical content. `architecture-c4.md` covers context, container, and component views, and `target-state.md` covers the target architecture. Within these files, add data, interface, trust-boundary, and deployment views; Dev, QA, production, and DevOps practice; tests and regression prevention; schemas and diagrams where evidence supports them; and risks, evidence gaps, unknowns, and assumptions. Mermaid is allowed in Markdown only. Use one read-only architecture or documentation owner from the chain outputs where appropriate.
-- Executive HTML decision page: P6 also drafts a standalone document, `executive-decision.html`, as the default executive deliverable for project assessments only. Other README and export outputs are not converted to HTML. It contains, in order: the headline decision (Go, Conditional Go, or No-Go); decision confidence with its evidence basis; key metrics only where supplied evidence contains them; no health or completeness score while any in-scope source is incomplete; executive summary; current-state diagnosis; target recommendation; major risks and mitigations; regression and operability gates; decisions and approvals needed; phased next steps (30/60/90 days or phases); and limitations. Use semantic HTML, a responsive viewport, inline CSS and inline SVG only, and a print-friendly layout. Use no external dependencies, CDNs, runtime rendering, secrets, or invented metrics. Mark missing values UNKNOWN.
+- For both the technical Markdown package and the executive HTML, expand internal labels and acronyms on first use and include a concise acronym/abbreviation index or glossary. At minimum, define `P0` as "scope and target" and `P1` as "runtime inventory gate"; do not leave readers to infer report-internal labels. Expand other abbreviations only from supplied evidence or their unambiguous supplied meaning. If an expansion cannot be established, retain the original label with `UNKNOWN` or explicitly state that the expansion is unavailable; never guess a technical meaning.
+- Executive HTML decision page: P6 also drafts a standalone document, `executive-decision.html`, as the default executive deliverable for project assessments only. Other README and export outputs are not converted to HTML. It contains, in order: the headline decision (Go, Conditional Go, or No-Go); decision confidence with its evidence basis; key metrics only where supplied evidence contains them; no health or completeness score while any in-scope source is incomplete; executive summary; current-state diagnosis; target recommendation; major risks and mitigations; regression and operability gates; decisions and approvals needed; phased next steps (30/60/90 days or phases); and limitations. Include the same concise acronym/abbreviation index or glossary before the detailed decision content and mark missing expansions UNKNOWN. Use semantic HTML, a responsive viewport, inline CSS and inline SVG only, and a print-friendly layout. Use no external dependencies, CDNs, runtime rendering, secrets, or invented metrics. Mark missing values UNKNOWN.
 
 ## Stop and Resume
 
 - Navigation stops per area on `CONVERGED`, `BLOCKED`, or `DEFERRED`, and for the whole run only when every area has a sufficiency state.
-- Record the resume point, remaining queue, and blocked sources in the source coverage register in `assessment-method-and-data.md`. Resume is specified intent only: it is not implemented or tested, and a later run must not assume completed containers were saved.
+- Save a progress checkpoint after P0/P1, each source P2 attempt, P3/P4, and P5/chain stages. The checkpoint is a checkpoint-only write beneath the exact P0 run root, for example `<run-root>/checkpoints/progress-checkpoint.md`; it is separate from and does not replace P7 final report persistence. The existing P7 gate remains for final reports. Resume continues the existing run root; never choose a fresh run ID or sibling folder midway. Never overwrite, and include run/scope, source status, batch ids, accepted record refs, completed phase, pending queue, failures/gaps, and next phase.
+- Resume from the latest readable checkpoint, use existing valid evidence and analysis outputs, and collect only deltas. Do not treat prior reports as source evidence. If the writer is unavailable, state `checkpoint not persisted`, preserve the checkpoint in chat for resume, and continue P3-P6.
+- Record the resume point, remaining queue, and blocked sources in the source coverage register in `assessment-method-and-data.md`.
+- Resume reuses only supplied prior records that pass the reuse eligibility rules in [project-evidence-ingestion](../project-evidence-ingestion/SKILL.md). Completed containers are reused only when eligible; a later run must not assume containers were saved unless the user supplied the checkpoint package.
+- Prior report documents are prior-report context only, never normalized evidence.
 
 ## Reference Basis
 

@@ -38,16 +38,24 @@ Review [specification/package and version] against [requirements or acceptance c
 ## Project Assessment
 
 ```text
-Assess the open project for [goal] across [approved sources, e.g. repository, SharePoint site, Azure DevOps project]. Declare scope first, collect read-only evidence per source, and report source status, coverage, and sufficiency per area. Sources whose tools are not bound at runtime are BLOCKED and unassessed until the runtime tool inventory is supplied. Mark BLOCKED or unassessed areas explicitly and produce no completeness or health score while any in-scope source is incomplete. Return the report content in the response. Persistence happens only when I explicitly ask you to save it and confirm a non-roster target path, through a separate handoff to the documentation writer.
+Assess the open project for [goal] across [approved sources, e.g. repository, SharePoint site, Azure DevOps project]. Declare scope first, collect read-only evidence per source, and report source status, coverage, and sufficiency per area. Sources whose tools are not bound at runtime are BLOCKED and unassessed until the runtime tool inventory is supplied. Mark BLOCKED or unassessed areas explicitly and produce no completeness or health score while any in-scope source is incomplete. At P0 create or choose one unique `docs/project-assessment/<run-id>/` root and reuse it for every source, phase, checkpoint, and final artifact. Never create sibling run folders or top-level phase-suffix directories. Return the report content in the response and save the full report package to that exact root by default. Never overwrite existing output. An explicit don't-save request keeps it chat-only, and an explicit alternate destination replaces the default.
 ```
 
-Short form. Aro runs the full default assessment of the open project and returns one consolidated result in chat. When nothing is saved, that result contains the actual content of every named report-package document. Files are not written unless you explicitly authorize saving (P7) with target paths; the package is never saved automatically. You do not need to paste agent instructions or name agents:
+Short form. Aro runs the full default assessment of the open project and saves the full report package to the open project. The result also reports exact relative paths and per-file delivery status. If nothing is saved, that result contains the actual content of every named report-package document. You do not need to paste agent instructions or name agents:
 
 ```text
 Do an assessment of this project.
 ```
 
-Remote sources still need their approved tools and access, and persistence still needs an explicit save request and a confirmed target path.
+To continue an existing project assessment without repeating intake, use the resolved open project as both target and report destination and state the supplied sources. For example:
+
+```text
+Continue la gérénration d'une évaluation complète du projet [Summary - Overview](https://dev.azure.com/ITQ-SEAO/SEAO), Des documents déjà ingéré sont disponible. Source: https://spgouvqc.sharepoint.com/teams/MCN-SEAO-Maintenance-volution
+```
+
+This continuation means resume prior work, search the open repository for existing ingested source artifacts and prior completed analysis, keep the Azure DevOps URL and SharePoint site in scope, and continue with readable evidence. Prior reports are context only. Remote sources unavailable through read-only tools are BLOCKED and other sources continue. P5/P6 may produce constrained partial analysis with explicit limitations, but completeness and a final go/no-go must not be claimed. The full technical Markdown package and standalone executive HTML are saved by default to a new run directory. They are returned in chat for an explicit chat-only override or if writer write/read tools are unavailable.
+
+Remote sources still need their approved read-only tools and access. Persistence does not need a separate save-confirmation question for normal open-project assessment prompts.
 
 ## Tips
 

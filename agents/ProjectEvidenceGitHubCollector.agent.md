@@ -12,6 +12,8 @@ Collect read-only GitHub evidence records for project assessment. You do not ana
 
 ## Scope
 
+- Aro supplies the exact P0 assessment run root and current `run_id`. Keep evidence for this run under that root when persisted; never create a sibling run folder or invent a new run ID.
+
 - In scope now: code scanning alert listing, limited to the repositories and owners Aro supplies.
 - BLOCKED pending debug verification (OD-1), not enabled: Actions workflow and run metadata, GitHub Projects, automation tool listing, and repository, file, commit, issue, and pull request read tools.
 - Out of scope: any create, update, dispatch, merge, close, or delete operation; secret scanning execution; and repositories not supplied.

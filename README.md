@@ -96,10 +96,10 @@ The roster includes 48 specialist agents, selected by Aro with help from the adv
 | [InfraTestInfrastructureGenerator](agents/InfraTestInfrastructureGenerator.agent.md) | Generate test suites, fixtures, mocks, coverage, and CI gates. |
 | [MultiLanguageBuilder](agents/MultiLanguageBuilder.agent.md) | Coordinate Python, Node.js, and TypeScript builds and dependencies. |
 | [ProjectAssessmentExpert](agents/ProjectAssessmentExpert.agent.md) | Analyze supplied evidence records across documentation, code, architecture, requirements, and delivery, with gaps visible. |
-| [ProjectEvidenceAzureDevOpsCollector](agents/ProjectEvidenceAzureDevOpsCollector.agent.md) | Collect read-only Azure DevOps evidence for projects, teams, and code, wiki, work item, or commit search. No tools are bound until debug verification; grouped categories are BLOCKED pending debug. |
+| [ProjectEvidenceAzureDevOpsCollector](agents/ProjectEvidenceAzureDevOpsCollector.agent.md) | Collect read-only Azure DevOps evidence for projects, teams, code, wiki, work-item, and commit search through six exact `ado-remote-mcp` tool IDs. Ambiguous grouped categories are excluded. |
 | [ProjectEvidenceGitHubCollector](agents/ProjectEvidenceGitHubCollector.agent.md) | Collect read-only GitHub code scanning alerts for a project assessment. No tools are bound until debug verification; other GitHub categories are BLOCKED pending debug. |
 | [ProjectEvidenceLocalRepoCollector](agents/ProjectEvidenceLocalRepoCollector.agent.md) | Collect read-only local target-repository evidence using read and search only. |
-| [ProjectEvidenceM365Collector](agents/ProjectEvidenceM365Collector.agent.md) | Teams, Planner, and OneDrive evidence collector with no tools bound. BLOCKED until distinct read tools are debug-bound and preauthorized. |
+| [ProjectEvidenceM365Collector](agents/ProjectEvidenceM365Collector.agent.md) | Read-only OneDrive evidence collector. SharePoint remains owned by the separate SharePoint collector; generic ODSP tool names do not establish a technical source boundary. |
 | [ProjectEvidenceSharePointCollector](agents/ProjectEvidenceSharePointCollector.agent.md) | Collect read-only SharePoint documents, libraries, lists, and site metadata. No tools are bound: four WorkIQ read tools are PENDING. BLOCKED until the binding and preauthorization are debug-verified. |
 
 </details>

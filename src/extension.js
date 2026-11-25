@@ -2,6 +2,7 @@ const vscode = require('vscode');
 const { randomBytes } = require('node:crypto');
 const { readFile } = require('node:fs/promises');
 const path = require('node:path');
+const { loadStore } = require('./prior-assessment-store');
 const { effectiveModelScope, getInventorySummary, getManagedPricing, hasSelectedLocalModel, isCopilotCloudVendor, isModelSelected, modelKey, modelKind, selectModels } = require('./model-pricing');
 const {
     ACTIVITIES,
@@ -487,6 +488,7 @@ async function applyProviderAvailabilityChange(context, message, models) {
 function activate(context) {
     context.subscriptions.push(registerModelLearningTools(context));
     context.subscriptions.push(registerSkillProcedureTool(context));
+    context.subscriptions.push(registerPriorAssessmentStoreTool(context));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.openModelLearning', () => openModelLearning(context)));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.openModelInventory', scope => openModelInventory(context, scope)));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.changeModelScope', () => changeModelScope(context)));
@@ -620,6 +622,52 @@ function registerSkillProcedureTool(context) {
             return new vscode.LanguageModelToolResult([
                 new vscode.LanguageModelTextPart(`skill=${skill} part=${part} of ${parts.length}${part < parts.length ? `; call again with part=${part + 1}` : '; final part'}. The next text block is the verbatim procedure segment; concatenate all parts in order.`),
                 new vscode.LanguageModelTextPart(parts[part - 1])
+            ]);
+        }
+    });
+}
+
+function registerPriorAssessmentStoreTool(context) {
+    return vscode.lm.registerTool('aro_read_prior_assessment_store', {
+        async prepareInvocation({ input }) {
+            return { invocationMessage: `Prepare to select an exact prior assessment SQLite file for ${input.operation === 'search' ? 'searching documents' : 'listing documents'}` };
+        },
+        async invoke({ input }) {
+            const selections = await vscode.window.showOpenDialog({
+                canSelectFiles: true,
+                canSelectFolders: false,
+                canSelectMany: false,
+                filters: { 'SQLite evidence store': ['sqlite', 'db'] },
+                title: 'Select the exact prior assessment evidence.sqlite file'
+            });
+            if (!selections || selections.length !== 1) {
+                throw new Error('The user did not select an exact prior assessment SQLite file; no database was opened.');
+            }
+            const sourcePath = selections[0].fsPath;
+            const manifestSelections = await vscode.window.showOpenDialog({
+                canSelectFiles: true,
+                canSelectFolders: false,
+                canSelectMany: false,
+                filters: { 'Adjacent evidence manifest': ['json'] },
+                title: 'Optional: select an adjacent manifest JSON explicitly confirming this SQLite corpus'
+            });
+            const manifestPath = manifestSelections?.length === 1 ? manifestSelections[0].fsPath : undefined;
+            const readOnlyOpen = true;
+            const result = await loadStore({
+                selectedPath: sourcePath,
+                manifestPath,
+                operation: input.operation,
+                query: input.query,
+                cursor: input.cursor,
+                pageSize: input.pageSize,
+                readOnly: true
+            });
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart(JSON.stringify({
+                    ...result,
+                    authorization: 'user_selected_exact_file',
+                    readOnlyOpen
+                }))
             ]);
         }
     });
@@ -1006,4 +1054,4 @@ function getLearningHtml(webview, extensionUri) {
 
 function deactivate() { }
 
-module.exports = { activate, deactivate };
+module.exports = { activate, deactivate, registerPriorAssessmentStoreTool };

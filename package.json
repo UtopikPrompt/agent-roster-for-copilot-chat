@@ -12,7 +12,8 @@
         "onView:agentRoster.modelLearning",
         "onLanguageModelTool:aroGetModelRecommendations",
         "onLanguageModelTool:aroRecordModelOutcome",
-        "onLanguageModelTool:aroGetSkillProcedure"
+        "onLanguageModelTool:aroGetSkillProcedure",
+        "onLanguageModelTool:aro_read_prior_assessment_store"
     ],
     "license": "PolyForm-Noncommercial-1.0.0",
     "engines": {
@@ -298,6 +299,40 @@
                         "outcome",
                         "evidenceCode"
                     ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "aro_read_prior_assessment_store",
+                "displayName": "Reuse prior assessment SQLite corpus",
+                "toolReferenceName": "aro_read_prior_assessment_store",
+                "canBeReferencedInPrompt": true,
+                "userDescription": "With explicit file confirmation, search or list a prior assessment SQLite extracted-text corpus read-only.",
+                "modelDescription": "After the user selects and confirms one exact SQLite file through a picker, optionally confirm one adjacent manifest JSON through a second picker. Reuse only the fixed documents/runs/docs_fts schema for bounded read-only FTS5 literal search or deterministic document listing. Accepts only operation, optional search text, cursor, and pageSize 1-20. Never accepts SQL or a path, never writes, and never claims comprehensive inventory. Results label prior local SQLite corpus reuse, PARTIAL/UNKNOWN coverage, canonical fields, conservative bounded excerpts or suppression, opaque store/run/native IDs, and an adjacent manifest as UNVERIFIED_NOT_CRYPTOGRAPHICALLY_BOUND_TO_DB unless a cryptographic DB binding is provided. Absolute paths, document rel_path values, and raw locators are never returned.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "operation": {
+                            "type": "string",
+                            "enum": ["search", "list"]
+                        },
+                        "query": {
+                            "type": "string",
+                            "maxLength": 200
+                        },
+                        "cursor": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0
+                        },
+                        "pageSize": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 20,
+                            "default": 20
+                        }
+                    },
+                    "required": ["operation"],
                     "additionalProperties": false
                 }
             },

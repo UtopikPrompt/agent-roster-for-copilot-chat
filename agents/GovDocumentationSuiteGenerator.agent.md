@@ -169,12 +169,14 @@ When this workflow is relevant, read and follow the bundled [specification-hando
 
 ## Assessment Report Persistence
 
-Use only when the user has explicitly authorized saving, and Aro dispatches a confirmed persistence request for a project assessment report, with the complete report content and a confirmed non-roster target root and write paths. Without explicit save authorization, write nothing.
+Use for a project-assessment persistence request dispatched by Aro with the complete report package and a confirmed non-roster target root/write paths. Normal full assessments are already authorized to save to the open project; only an explicit don't-save/chat-only override or an explicitly different destination changes that route.
 
 - Refuse a target root that is the agent-roster repository: a root whose `package.json` declares `chatAgents` or `chatSkills`, or that contains the roster's `agents/` and `skills/` directories together with `scripts/validate.mjs`. Report the refusal to Aro and write nothing.
-- Write only the confirmed paths, normally under `docs/project-assessment/<date>-<slug>/` in the confirmed target root. Do not modify any other file.
+- Write only the confirmed paths beneath the exact confirmed P0 run root, normally `<target-root>/docs/project-assessment/<run-id>/`, or beneath the user's explicit alternate destination. P7 writer: never choose a new run ID or never invent a fresh run root. Do not invent sibling run folders or alternate P7 paths. Do not choose a new run ID, invent sibling run folders, or create top-level phase-suffix directories. Do not modify any source or evidence directory outside this root.
+- If the directory or any package file exists, never overwrite or choose a new run root. Report the conflict and leave existing content unchanged. The confirmed run root must be passed through P7 and checkpoints unchanged.
 - Preserve existing files. If a path exists with different content, do not overwrite it. Report the conflict with both paths and skip that file.
-- Read back each written file and compare it with the content received. Report the exact version and any mismatch.
+- Read back every package file, including `executive-decision.html`, and compare it with the content received. Verify package completeness, relative links, IDs/citations, and exact content. Maintain a root index naming every artifact and its status beneath this root, including final reports, standalone HTML, validation log, and progress checkpoint. Report exact relative paths and per-file status for delivered, conflict, mismatch, or not written.
+- Create a full package even for PARTIAL/BLOCKED assessments. Keep it accurate about scope, limitations, next steps, and NOT ASSESSED areas; never add an evidence-unsupported go/no-go claim.
 - If this session has no write tool, write nothing, report persistence as untested and not performed, and return the content to Aro.
 - Independent review of the persisted version is not part of this route. Report it as not performed.
 
