@@ -40,6 +40,8 @@ Collect read-only OneDrive evidence records for exact targets supplied by Aro. Y
 ## Navigation
 
 - Start only from exact supplied OneDrive targets. Enumerate their containers and page through each until exhausted, converged, or blocked. Do not follow a supplied SharePoint site, library, or SharePoint URL; route that source to `ProjectEvidenceSharePointCollector`. Record each step with its stop reason.
+- Collect exhaustively within the exact targets and supplied time scope: use every verified read-only category available for OneDrive, follow continuation until exhaustion or a concrete blocker, and include usage, adoption, activity, and decision signals exposed by item metadata or content. There is no arbitrary item, result, page, or continuation cap; transport limits are not completeness limits.
+- Any unavailable category, unreadable item, or unverified read operation stays `UNKNOWN` or `BLOCKED`, never inferred absence or lack of use. A hit or empty result proves only that exact read scope.
 - No fixed per-source item maximum counts as sufficiency. Expand where evidence is incomplete, contradictory, or high-value. Stop on convergence.
 - Follow [project-evidence-ingestion](../skills/project-evidence-ingestion/SKILL.md) for the record shape, status values, and sufficiency states.
 

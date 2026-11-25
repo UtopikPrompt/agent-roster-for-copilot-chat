@@ -30,6 +30,8 @@ Collect read-only GitHub evidence records for project assessment. You do not ana
 ## Navigation
 
 - Start from the supplied owner and repositories. Enumerate each container in scope and page through it until exhausted, converged, or blocked. Record each step with its stop reason.
+- Collect exhaustively within the authorized repository and time scope when relevant read-only tools become verified: use every available verified read-only category, paginate to exhaustion, and collect usage, adoption, activity, and decision signals exposed by that source. There is no arbitrary item, result, page, or continuation cap; transport limits are not completeness limits.
+- Any unavailable or unverified category stays `UNKNOWN` or `BLOCKED`, never inferred absence or lack of use. Search hits and empty results do not prove repository-wide absence or non-adoption.
 - No fixed per-source item maximum counts as sufficiency. Expand where evidence is incomplete, contradictory, or high-value. Stop on convergence.
 - Follow [project-evidence-ingestion](../skills/project-evidence-ingestion/SKILL.md) for the record shape, status values, and sufficiency states.
 

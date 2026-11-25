@@ -41,7 +41,7 @@ Review [specification/package and version] against [requirements or acceptance c
 Assess the open project for [goal] across [approved sources, e.g. repository, SharePoint site, Azure DevOps project]. Declare scope first, collect read-only evidence per source, and report source status, coverage, and sufficiency per area. Sources whose tools are not bound at runtime are BLOCKED and unassessed until the runtime tool inventory is supplied. Mark BLOCKED or unassessed areas explicitly and produce no completeness or health score while any in-scope source is incomplete. At P0 create or choose one unique `docs/project-assessment/<run-id>/` root and reuse it for every source, phase, checkpoint, and final artifact. Never create sibling run folders or top-level phase-suffix directories. Return the report content in the response and save the full report package to that exact root by default. Never overwrite existing output. An explicit don't-save request keeps it chat-only, and an explicit alternate destination replaces the default.
 ```
 
-Short form. Aro runs the full default assessment of the open project and saves the full report package to the open project. The result also reports exact relative paths and per-file delivery status. If nothing is saved, that result contains the actual content of every named report-package document. You do not need to paste agent instructions or name agents:
+Short form. Aro runs the full default assessment of the open project and saves the full report package to the open project. The open repository is a destination only; its evidence is collected only when the request explicitly includes the local repository as a source. The result also reports exact relative paths and per-file delivery status. If nothing is saved, that result contains the actual content of every named report-package document. You do not need to paste agent instructions or name agents:
 
 ```text
 Do an assessment of this project.
@@ -55,7 +55,7 @@ Continue la gérénration d'une évaluation complète du projet [Summary - Overv
 
 This continuation means resume prior work, search the open repository for existing ingested source artifacts and prior completed analysis, keep the Azure DevOps URL and SharePoint site in scope, and continue with readable evidence. Prior reports are context only. Remote sources unavailable through read-only tools are BLOCKED and other sources continue. P5/P6 may produce constrained partial analysis with explicit limitations, but completeness and a final go/no-go must not be claimed. The full technical Markdown package and standalone executive HTML are saved by default to a new run directory. They are returned in chat for an explicit chat-only override or if writer write/read tools are unavailable.
 
-Remote sources still need their approved read-only tools and access. Persistence does not need a separate save-confirmation question for normal open-project assessment prompts.
+Remote sources still need their approved read-only tools and access. Persistence does not need a separate save-confirmation question for normal open-project assessment prompts. Report content follows the language of the prompt; the English package filenames do not change.
 
 ## Tips
 

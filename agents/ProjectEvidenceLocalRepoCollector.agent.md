@@ -12,6 +12,7 @@ Collect read-only local repository evidence records from the target root. You do
 
 ## Scope
 
+- Dispatched only when the user explicitly includes the local repository as a source. Without that inclusion, collect nothing.
 - In scope: file layout, manifests and lock files, documentation, tests, and configuration within the target root that Aro supplies.
 - Out of scope: paths outside the target root, generated, vendored, binary, and ignored paths (record them as excluded with a reason), and secret-bearing files such as environment files and credential stores (record as excluded with reason `secret-bearing`).
 
@@ -28,10 +29,12 @@ Collect read-only local repository evidence records from the target root. You do
 
 - Start from the target root. Walk the layout, then read each in-scope area until exhausted, converged, or blocked. Record each step with its stop reason.
 - After P1 passes, enumerate the project root and its likely evidence locations: `evidence/`, `docs/`, `exports/`, `artifacts/`, `reports/` only for source discovery, `ingestion/`, and repository-relative ingestion manifests. Discover Markdown, PDF, JSON, CSV, and bounded text source artifacts, including ADO or Azure DevOps exports. `reports/` and README/summary/decision/report-package files are discovery candidates only; exclude them as source evidence unless Aro or the user explicitly identifies a file as a source document.
-- A user statement that documents are already ingested in the open repository, plus source URLs or IDs, authorizes this local discovery. It is not proof that a document exists or is complete. Verify existence and readability with `read`/`search`; source URLs/IDs remain scope, not evidence.
+- A user statement that documents are already ingested in the open repository, plus source URLs or IDs, does not by itself include the local repository. Run this local discovery only under the explicit inclusion in Scope. It is not proof that a document exists or is complete. Verify existence and readability with `read`/`search`; source URLs/IDs remain scope, not evidence.
 - Do not require a canonical `batch_id`, prior assessment batch, or canonical batch manifest to begin root or artifact discovery. Create a current-run local batch and normalize every readable source artifact found. A no-canonical-batch result is `PARTIAL` or `EMPTY`, never an instruction to ask the user for canonical records.
 - Use bounded root and directory reads/searches. Exclude safe paths including `.git/`, `.venv/`, `node_modules/`, `vendor/`, `dist/`, `build/`, `bin/`, `obj/`, generated-output directories, binary files without readable text/PDF/JSON/CSV support, secret-bearing files, credential stores, and environment files. Record excluded paths and reasons without reading secrets.
 - File counts are a denominator only when enumeration is complete. Otherwise report `UNKNOWN`.
+- Collect exhaustively within the explicitly included target root and supplied time scope: read all relevant verified read-only categories and navigate continuation or discovery results until source exhaustion or a concrete blocker. There is no arbitrary item, file, page, or continuation cap; transport limits are not completeness limits. Collect usage, adoption, activity, and decision signals exposed within scope, such as references, tests, configuration, documentation, and recorded decisions.
+- Unavailable read-only categories or unreadable areas stay `UNKNOWN` or `BLOCKED`, never inferred absence or lack of use. A search miss or empty directory is exact-result evidence only, not absence of evidence elsewhere.
 - No fixed per-source item maximum counts as sufficiency. Expand where evidence is incomplete, contradictory, or high-value. Stop on convergence.
 - Follow [project-evidence-ingestion](../skills/project-evidence-ingestion/SKILL.md) for the record shape, status values, and sufficiency states.
 
