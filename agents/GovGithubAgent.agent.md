@@ -33,11 +33,7 @@ A dedicated GitHub/agent-capability agent. When invoked, you detect the current 
    - If no spec exists, **infer the scope from the conversation/context**, then propose it.
    - Before filing, list the key open questions and any assumptions so the user can confirm or adjust.
 
-3. **File the plan (issue or project item).** First, check which `github/*` tools are available to you at runtime and which support **Projects/boards** (creation/querying). Then:
-   - **If Project tools exist:** Prefer filing in the same repo (as an Issue) unless a GitHub **Project/Board** in that org is a better home for the capability. If a Project is a better fit, **create the project (and/or board)** via the github/* project tools, then file the plan as a project item.
-   - **If no Project tools exist (common case):** GitHub's Projects API is restricted and many MCP servers omit it — fall back to filing the plan in the same repo **as a GitHub Issue**, and **tell the user** that Projects/boards are unavailable via the current tools.
-   - **If no issue/project-creation tool exists at all:** fall back to **describing the exact issue/project item** (title, body, and where it should be filed) in your output.
-   Either way, put the plan into the body/fields. If `github/*` does not expose issue/project-creation tools, fall back to **describing the exact issue/project item** (title, body, and where it should be filed) in your output.
+3. **File the plan (issue or project item).** With the exact repository, authorization, and payload established, invoke the appropriate allowlisted GitHub operation directly. Prefer filing in the same repo as an Issue unless an authorized Project/Board is explicitly a better destination and the required project operation is available. Put the plan into the body/fields. Do not inventory tools or probe alternatives. If the actual invocation returns tool-not-found/unavailable, report `BLOCKED` for that exact operation and stop; do not substitute or retry.
 
 4. **Report back as a proposal.** Summarize what you did and what was filed. **Do NOT** mark anything as resolved/decided unless the user explicitly confirms — an unchallenged plan is still a proposal.
 

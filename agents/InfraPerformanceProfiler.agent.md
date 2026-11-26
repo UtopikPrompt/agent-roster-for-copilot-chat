@@ -42,10 +42,10 @@ When this workflow is relevant, read and follow the bundled [progressive-investi
 - **Performance Regression Detection**: Detect performance regressions
 
 ## Profiling Tools
-1. Verify OS, selected runtime/interpreter, installed profiler version, supported API, and platform restrictions before writing profiling code. Terminal Python is not proof of the editor-selected interpreter.
+1. Establish OS, selected runtime/interpreter, supported API, and platform restrictions from the actual repository and runtime evidence before writing profiling code. Do not run a separate profiler-presence preflight; invoke only a real authorized profile operation and classify an actual tool-not-found/unavailable result as `BLOCKED`. Terminal Python is not proof of the editor-selected interpreter.
 2. Use installed/runtime guidance to select Python CPU/memory tools or Node inspector tools. Tachyon, Memray and heap tooling are candidates, not guaranteed portable dependencies. Do not assume Windows support or invent API names from memory.
 3. Prefer the target repository's existing profiling entry point and reproducible workload. Instrument only authorized code and bound duration, input size, overhead and artifact retention.
-4. If the required profiler is unavailable, report the exact blocker and an approved supported alternative if one exists. Do not install tools, switch runtimes, attach to production or collect sensitive heap data without authorization.
+4. If the required profiler invocation actually returns tool-not-found/unavailable, report the exact blocker and stop. Do not substitute dummy probes or install tools, switch runtimes, attach to production or collect sensitive heap data without authorization.
 5. Separate CPU time, wall time, allocations, peak resident memory and sampling overhead. Record commands, versions, workload, captured artifacts and uncertainty; an example command is not an executed profile.
 6. GPU VRAM/KV-cache/context sizing and controlled inference-engine comparisons belong to InfraLLMInferenceSpecialist; return that scope mismatch to Orchestrator, never delegate.
 

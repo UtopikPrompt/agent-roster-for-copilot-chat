@@ -43,11 +43,11 @@ test('Azure DevOps agent is a read-first, non-delegating worker routed through I
     assert.match(body, /Externally consequential/);
     assert.match(body, /Destructive/);
     assert.match(body, /Do not delegate/);
-    assert.match(body, /Treat the `ado-remote-mcp` tools as unknown until the runtime lists them/);
+    assert.match(body, /Do not inventory or preflight the runtime tool list/);
 
     assert.match(body, /## Connection Check/);
-    assert.match(body, /Prefer `core_list_orgs` when the organization is missing/);
-    assert.match(body, /use `core_list_projects` when the organization is known but the project is missing/);
+    assert.match(body, /Prefer `core_list_orgs` when organization context is missing/);
+    assert.match(body, /use `core_list_projects` when the organization is known/);
     assert.match(body, /authentication or authorization error/);
     assert.match(body, /connection error/);
     assert.match(body, /empty or no data/);
@@ -61,7 +61,7 @@ test('Azure DevOps agent is a read-first, non-delegating worker routed through I
     assert.match(body, /On read-only calls, omit the organization argument when the tool schema makes it optional so the endpoint can supply its default\./);
     assert.match(body, /Request an explicit organization only after the tool indicates it is required and no configured default can be used/);
     assert.match(body, /Never infer or fabricate one/);
-    assert.match(body, /Do not infer that the configured organization is inaccessible/);
+    assert.match(body, /do not infer that the configured organization is inaccessible/);
     assert.doesNotMatch(body, /When the organization is missing, call `core_list_orgs`/);
     assert.match(body, /only an unscoped endpoint \(`https:\/\/mcp\.dev\.azure\.com`, with no organization in the URL\) can pass a different organization per call/);
     assert.match(body, /Results remain constrained by the authenticated user's Azure DevOps access/);
@@ -100,9 +100,9 @@ test('GovWebResearchAgent fetches supplied URLs with web/fetch independent of Se
     const procedure = text.split('## Research Procedure ')[1]?.split(/ ## /)[0];
     assert.ok(procedure, 'Missing research procedure');
     assert.match(procedure, /Fetch every directly supplied public URL with the declared `web\/fetch` tool\. This does not depend on SearXNG/);
-    assert.match(procedure, /use `web_url_read` only when that SearXNG tool is exposed/);
-    assert.match(procedure, /only when its tool is actually exposed/);
-    assert.match(procedure, /mark search-dependent work BLOCKED/);
+    assert.match(procedure, /use `web_url_read` only for a real required SearXNG-backed read with valid arguments/);
+    assert.match(procedure, /Do not inspect tool exposure before a real search/);
+    assert.match(procedure, /mark\s+search-dependent work `BLOCKED`/);
     assert.match(procedure, /Never use `azure-mcp\/search` as public web search/);
     assert.doesNotMatch(text, /Read relevant result URLs with `web_url_read`/);
     assert.match(text, /Cite only pages actually fetched/);
@@ -111,8 +111,8 @@ test('GovWebResearchAgent fetches supplied URLs with web/fetch independent of Se
 test('Aro routes direct public URL fetching through web/fetch with SearXNG optional', async () => {
     const { body } = parseCustomization(await readFile(path.join(root, 'agents/Aro.agent.md'), 'utf8'), 'Aro');
     const cue = body.replace(/\s+/g, ' ');
-    assert.match(cue, /Direct public URL fetching uses its declared `web\/fetch` tool and does not depend on SearXNG/);
-    assert.match(cue, /SearXNG tools .*are optional for search when exposed/);
+    assert.match(cue, /Direct public URL fetching uses .{1,40}declared `web\/fetch` tool and does not depend on SearXNG/);
+    assert.match(cue, /SearXNG search is optional and is invoked only for a real authorized search, not tested for presence in a separate preflight/);
 });
 
 test('Aro learns model outcomes by contextual activity, domain, and difficulty', async () => {
@@ -125,30 +125,33 @@ test('Aro learns model outcomes by contextual activity, domain, and difficulty',
     assert.ok(metadata.tools.includes(`${extensionId}/aroRecordModelOutcome`));
     const modelSelection = body.split('## Model Selection and Learning\n')[1]?.split(/^## /m)[0];
     assert.ok(modelSelection, 'Missing model selection guidance');
-    assert.match(modelSelection, /aroGetModelRecommendations/);
-    assert.match(modelSelection, /selectionMode/);
-    assert.match(modelSelection, /`selectionMode` is `manual`/);
-    assert.match(modelSelection, /`manual-unavailable`/);
-    assert.match(modelSelection, /`selectionMode` is `fallback`/);
-    assert.match(modelSelection, /use `recommendedModelId`\s+to find its candidate/);
-    assert.match(modelSelection, /exact `modelArgument` when\s+supported/);
-    assert.match(modelSelection, /`learned`, `pooled`, or an eligible `explore`/);
-    assert.match(modelSelection, /never bypass the selected model scope/);
-    assert.match(modelSelection, /aroRecordModelOutcome/);
-    assert.match(modelSelection, /bounded shortlist/);
-    assert.match(modelSelection, /Before each advisor or specialist call/);
-    assert.match(modelSelection, /never inspect, mirror, or\s+change the user's Aro chat model/);
-    assert.match(modelSelection, /`excludedModels`/);
-    assert.match(modelSelection, /`excludedProviders`/);
-    assert.match(modelSelection, /at most three subagent attempts/);
-    assert.match(modelSelection, /Never retry a potentially mutating worker unless evidence shows it did not\s+start/);
-    assert.match(modelSelection, /Valid JSON, an allowlisted name, or a worker's later result alone is\s+not proof/);
-    assert.match(modelSelection, /Do not\s+score routing mistakes,\s+missing input,\s+unsupported models, tool failures/);
-    assert.ok(modelSelection.includes('Claude Haiku 5.5 (copilot)'));
-    assert.ok(modelSelection.includes('clear, bounded'));
-    assert.ok(modelSelection.includes('low-risk'));
-    assert.ok(modelSelection.includes('Claude Sonnet 5.5 (copilot)'));
-    assert.ok(modelSelection.includes('materially complex'));
+    const text = modelSelection.replace(/\s+/g, ' ');
+    assert.match(text, /aroGetModelRecommendations/);
+    assert.match(text, /selectionMode/);
+    for (const mode of ['manual', 'manual-unavailable', 'fallback']) {
+        assert.match(text, new RegExp(`\`${mode}\``));
+    }
+    assert.match(text, /recommendedModelId/);
+    assert.match(text, /modelArgument/);
+    assert.match(text, /`learned`, `pooled`, or an eligible `explore`/);
+    assert.match(text, /never bypass the selected model scope/i);
+    assert.match(text, /aroRecordModelOutcome/);
+    for (const field of ['activity', 'domain', 'difficulty', 'callId']) {
+        assert.match(text, new RegExp(`\`${field}\``));
+    }
+    assert.match(text, /bounded shortlist/);
+    assert.match(text, /Before each advisor or specialist call/);
+    assert.match(text, /never inspect, mirror, or change the user's Aro chat model/i);
+    assert.match(text, /`excludedModels`/);
+    assert.match(text, /`excludedProviders`/);
+    assert.match(text, /at most three subagent attempts/);
+    assert.match(text, /Never retry a potentially mutating worker unless evidence shows it did not start/);
+    assert.match(text, /Valid JSON, an allowlisted name, or a worker's later result alone is not proof/);
+    assert.match(text, /Do not score routing mistakes, missing input, unsupported models, tool failures/);
+    assert.match(text, /Claude Haiku 5\.5 \(copilot\)/);
+    assert.match(text, /low-risk/);
+    assert.match(text, /Claude Sonnet 5\.5 \(copilot\)/);
+    assert.match(text, /materially complex/);
 });
 
 test('preserves economical model preferences on configured selection advisors', async () => {
@@ -161,12 +164,13 @@ test('preserves economical model preferences on configured selection advisors', 
 
 test('Aro resolves procedure gaps and owns persistence for read-only assessment workers', async () => {
     const { body } = parseCustomization(await readFile(path.join(root, 'agents/Aro.agent.md'), 'utf8'), 'Aro');
-    assert.match(body, /runtime-discovered locations, never paths guessed from\s+the target repository/);
-    assert.match(body, /retry the affected scope/);
-    assert.match(body, /continuing independent authorized work/);
-    assert.match(body, /consult DocsGovernanceAdvisor and invoke GovDocumentationSuiteGenerator/);
-    assert.match(body, /verify saved paths by read-back/);
-    assert.match(body, /only after the writer route fails or lacks its required tools/);
+    const text = body.replace(/\s+/g, ' ');
+    assert.match(text, /runtime-discovered locations and complete findings rather than paths guessed from the target repository/);
+    assert.match(text, /retry the affected scope/);
+    assert.match(text, /continue independent authorized work/);
+    assert.match(text, /consult DocsGovernanceAdvisor and invoke GovDocumentationSuiteGenerator/);
+    assert.match(text, /verify saved paths by read-back/i);
+    assert.match(text, /only after the writer route fails or lacks its required tools/i);
     const worker = parseCustomization(await readFile(path.join(root, 'agents/CodeRebuildEngineer.agent.md'), 'utf8'), 'CodeRebuildEngineer');
     assert.deepEqual(worker.metadata.tools, ['read', 'search']);
     assert.deepEqual(worker.metadata.agents, []);
@@ -363,36 +367,43 @@ test('maintenance and privacy documentation describe the learning runtime', asyn
     const screenshot = await readFile(path.join(root, 'assets/aro-learning-dashboard.png'));
     assert.deepEqual(screenshot.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     assert.match(instructions, /extension host also implements the Aro model-learning tools/i);
+    assert.match(instructions, /Future edits must preserve Aro's thin-dispatcher purpose/i);
+    assert.match(instructions, /do not give Aro domain, read, search, edit, build, collection, or diagnosis duties/i);
     assert.doesNotMatch(instructions, /should not gain activation code/i);
 });
 
 test('Aro consults the required domain advisor before every specialist dispatch', async () => {
     const { body } = parseCustomization(await readFile(path.join(root, 'agents/Aro.agent.md'), 'utf8'), 'Aro');
-    assert.match(body, /Before every specialist dispatch, invoke the relevant advisor/);
-    assert.match(body, /consult\s+the relevant advisor for each distinct specialist selection/);
-    assert.match(body, /\| Selection Cue \| Worker \| Required Advisor \|/);
-    assert.doesNotMatch(body, /Optional Advisor/);
-    assert.match(body, /## Pre-Blocker Dispatch Gate\s+Before any user-facing BLOCKED or missing-tool report/);
-    assert.match(body, /confirm its worker is in your `agents` allowlist/);
-    assert.match(body, /Invoke that exact worker with the agent-dispatch tool\. Never substitute local research, diagnosis, or an unrelated tool\./);
-    assert.match(body, /Report BLOCKED only after that invocation fails or the worker reports its own missing capability/);
-    assert.match(body, /name the exact unavailable tool or capability, state that access remains unknown/);
-    assert.match(body, /enabling or exposing that tool in the active runtime is the remedy/);
-    assert.match(body, /Do not ask for an organization URL, project, or configuration as a workaround/);
-    assert.doesNotMatch(body, /(?:provide|enter|paste)\s+the organization URL\s*\(/i);
-    assert.match(body, /never infer no access from absent tools/);
+    const text = body.replace(/\s+/g, ' ');
+    assert.match(text, /Before every specialist dispatch, invoke the relevant advisor/);
+    assert.match(text, /Before every specialist dispatch, invoke the relevant advisor and consult it for each distinct specialist selection/);
+    assert.match(text, /\| Selection Cue \| Worker \| Required Advisor \|/);
+    assert.doesNotMatch(text, /Optional Advisor/);
+    assert.match(text, /Pre-Blocker Dispatch Gate/);
+    assert.match(text, /Report BLOCKED only when the specialist invocation or a required operation actually fails with tool-not-found\/unavailable/);
+    assert.match(text, /confirm the exact worker is in your `agents` allowlist/);
+    assert.match(text, /Invoke that exact worker with the agent-dispatch tool\. Never substitute local research, diagnosis, or an unrelated tool\./);
+    assert.match(text, /Report BLOCKED only when the specialist invocation or a required operation actually fails with tool-not-found\/unavailable/);
+    assert.match(text, /Name the unavailable tool or capability and stop/);
+    assert.match(text, /Do not infer no access from an uninspected runtime/);
+    assert.match(text, /Do not infer no access from an uninspected runtime/);
+    assert.match(text, /use an organization URL, project, or configuration as a workaround/);
+    assert.doesNotMatch(text, /(?:ask|request)[^.]*(?:organization|project|URL)[^.]*(?:callable|enable)/i);
+    assert.doesNotMatch(text, /(?:provide|enter|paste)\s+the organization URL\s*\(/i);
 });
 
 test('Azure DevOps worker and Aro reject organization-URL workarounds for missing discovery tools', async () => {
     const worker = parseCustomization(await readFile(path.join(root, 'agents/InfraAzureDevOpsAgent.agent.md'), 'utf8'), 'InfraAzureDevOpsAgent').body;
-    const aro = parseCustomization(await readFile(path.join(root, 'agents/Aro.agent.md'), 'utf8'), 'Aro').body;
+    const aro = parseCustomization(await readFile(path.join(root, 'agents/Aro.agent.md'), 'utf8'), 'Aro').body.replace(/\s+/g, ' ');
     for (const body of [worker, aro]) {
         assert.doesNotMatch(body, /Provide the organization URL/i);
         assert.doesNotMatch(body, /or enable the Azure DevOps tools so I can check access/i);
-        assert.match(body, /context cannot (?:make a missing tool callable|replace a missing tool)|an organization or URL cannot make a missing tool callable/);
-        assert.match(body, /Do not ask for an organization when the worker's endpoint may supply default context|Do not ask for an organization when the endpoint may supply default context/);
     }
-    assert.match(worker, /Do not ask for an organization URL, project, or configuration as a workaround/);
+    assert.match(worker, /Never infer or fabricate one/);
+    assert.match(worker, /Do not ask for an organization when the endpoint may supply default context/);
+    assert.match(worker, /Request an explicit organization only after the tool indicates it is required and no configured default can be used/);
+    assert.match(aro, /use an organization URL, project, or configuration as a workaround/);
+    assert.doesNotMatch(aro, /(?:ask|request)[^.]*(?:organization|project|URL)[^.]*(?:callable|enable)/i);
 });
 
 test('Azure DevOps worker states the endpoint default organization rule', async () => {
@@ -422,11 +433,12 @@ test('advisor scopes and shared skill consumers stay aligned', async () => {
 
 test('Aro surfaces evidence-based roster gaps without automatic filing', async () => {
     const { body } = parseCustomization(await readFile(path.join(root, 'agents/Aro.agent.md'), 'utf8'), 'Aro');
-    assert.match(body, /## Roster Gap Signals/);
-    assert.match(body, /current-conversation evidence/);
-    assert.match(body, /Never create an agent, skill, issue, or project automatically/);
-    assert.match(body, /consult DocsGovernanceAdvisor and dispatch GovGithubAgent/);
-    assert.match(body, /if filing tools or a verified destination\s+are unavailable, provide the draft/);
+    const text = body.replace(/\s+/g, ' ');
+    assert.match(text, /## Roster Gap Signals/);
+    assert.match(text, /current-conversation evidence/);
+    assert.match(text, /Never create an agent, skill, issue, or project automatically/);
+    assert.match(text, /consult DocsGovernanceAdvisor and dispatch GovGithubAgent/);
+    assert.match(text, /if filing tools or a verified destination are unavailable, provide the draft/);
 });
 
 test('sidebar quick controls and status follow saved model policy and outcomes', async () => {

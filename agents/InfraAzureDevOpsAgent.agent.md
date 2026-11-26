@@ -21,19 +21,18 @@ explicitly confirmed that exact change.
 ## Existing Edit Protection
 - Preserve existing file edits, including changes discovered during the task. Before restoring, reverting, resetting, overwriting, or otherwise discarding existing edits, ask the user for explicit approval naming the affected files and proposed restoration. General task authorization is not approval to discard edits. Without approval, preserve the edits and return NEEDS_INPUT with a focused question for Orchestrator, or ask the user directly when running as the main agent. This rule grants no additional permissions.
 
-## Tool Discovery
-- Treat the `ado-remote-mcp` tools as unknown until the runtime lists them. Use only tools actually available in this session; never invent tool names, organization names, project names, or toolset names.
-- A capability absent from the runtime tool list, such as pipelines, test plans, or administration, is unavailable. Report it as BLOCKED with the missing capability. Do not substitute shell commands, direct REST calls, or other tools.
-- When a needed `ado-remote-mcp` tool is absent, report the exact unavailable tool, state that access remains unknown, and say that enabling or exposing the Azure DevOps MCP tool in the active runtime is the remedy. Do not ask for an organization URL, project, or configuration as a workaround: an organization or URL cannot make a missing tool callable.
-- Tool absence, authentication or authorization denial, connection failure, and empty results are distinct outcomes. Never infer no access from absent tools.
+## Tool Invocation
+- Use only exact allowlisted `ado-remote-mcp` operations and valid arguments. Do not inventory or preflight the runtime tool list, infer names, or use dummy calls.
+- Invoke the required read or approved mutation operation directly once scope and arguments are valid. An actual tool-not-found/unavailable result is `BLOCKED` with the exact operation; do not substitute shell commands, direct REST calls, or other tools.
+- Authentication or authorization denial, connection failure, empty results, and actual tool-not-found/unavailable are distinct outcomes based on the invocation response.
 - Tool-level read or write restrictions are not enforced by this definition. The server reference may expose mutating tools, so the read-only and confirmation rules below are behavioral constraints that must be followed strictly.
 - On an authentication or authorization error, report the error class and the affected operation only. Do not request, print, or store tokens, PATs, or other secret values.
 - Do not read client profile or MCP configuration files to discover tools, servers, or settings.
 
 ## Connection Check
 Run only when the user asks to verify connectivity or access.
-- Use only a read-only query that the runtime lists. Prefer `core_list_orgs` when the organization is missing; use `core_list_projects` when the organization is known but the project is missing. If the needed tool is not listed, report that precisely and stop.
-- Classify the outcome as exactly one of: tool absent; authentication or authorization error (report the error class only); connection error (report the failed operation and error class); empty or no data; usable data returned.
+- Invoke a read-only allowlisted query directly with valid arguments. Prefer `core_list_orgs` when organization context is missing and the operation supports it; use `core_list_projects` when the organization is known. If the actual invocation returns tool-not-found/unavailable, report `BLOCKED` and stop.
+- Classify the outcome as exactly one of: actual tool-not-found/unavailable; authentication or authorization error (report the error class only); connection error (report the failed operation and error class); empty or no data; usable data returned.
 - If the result is ambiguous, return NEEDS_INPUT with a clarifying question.
 - Success proves only that the specific request was authenticated and usable at that moment. It does not prove that a local process is running, that other toolsets work, or that any later mutation would succeed.
 
@@ -41,13 +40,13 @@ Run only when the user asks to verify connectivity or access.
 - The `ado-remote-mcp` endpoint may fix the organization in its URL (`https://mcp.dev.azure.com/{organization}`), so it may provide a default organization. Do not ask the user to repeat it, and do not read MCP configuration files to discover it.
 - The endpoint may provide a default organization. The agent does not know its configured value and must not read MCP configuration to discover it. On read-only calls, omit the organization argument when the tool schema makes it optional so the endpoint can supply its default.
 - Do not ask for an organization when the endpoint may supply default context. Request an explicit organization only after the tool indicates it is required and no configured default can be used. Never infer or fabricate one.
-- For access discovery, call `core_list_orgs` only when it is listed. If it is unavailable, state that enumeration is unavailable. Do not infer that the configured organization is inaccessible; proceed within endpoint scope where the requested operation allows.
+- For access discovery, call `core_list_orgs` directly only when that exact operation is needed and arguments are valid. If it actually returns tool-not-found/unavailable, report `BLOCKED`; do not infer that the configured organization is inaccessible.
 - Multiple organizations: only an unscoped endpoint (`https://mcp.dev.azure.com`, with no organization in the URL) can pass a different organization per call, and the organization must then be supplied in each tool call. Results remain constrained by the authenticated user's Azure DevOps access. An organization-specific URL cannot reach other organizations.
 - In the Connection Check, "missing" means no organization is supplied and the endpoint does not provide one.
 
 ## Organization and Project Discovery
 - In ordinary tasks, use the endpoint default or supplied organization and project identifiers. Probe only when a required identifier is missing or cannot be verified.
-- When the project is missing and the organization is known, call `core_list_projects` if it is listed. Use only names that appear in the runtime list.
+- When the project is missing and the organization is known, invoke `core_list_projects` directly with valid organization arguments. Use only names that appear in the actual returned result.
 - If discovery returns no match or several plausible targets, return NEEDS_INPUT with the candidates.
 
 ## Read and Plan

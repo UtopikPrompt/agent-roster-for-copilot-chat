@@ -6,6 +6,27 @@
             "script": "vscode:prepublish",
             "problemMatcher": [],
             "label": "npm: vscode:prepublish"
+        },
+        {
+            "type": "npm",
+            "script": "test:skip",
+            "problemMatcher": [],
+            "label": "npm: test:skip"
+        },
+        {
+            "type": "npm",
+            "script": "lint",
+            "problemMatcher": [],
+            "label": "npm: lint"
+        },
+        {
+            "label": "Agent Roster: Debug prelaunch (tests skipped)",
+            "dependsOn": [
+                "npm: test:skip",
+                "npm: lint"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
         }
     ]
 }

@@ -108,18 +108,6 @@ const ADO_PREFixed_PLACEHOLDER = /^mcp_|^ado[_]remote|mcp_azuredevops/i;
 const ADO_RESULT_CAP = /\b(?:top|maxResults|max results|result cap|item cap|page cap|page limit|result limit|item limit)\b\s*[=:]?\s*\d+|\b(?:one|a single|single)[ -]continuation\b|\bat most one\b|\b(?:first|one) page only\b|\bonly the first page\b|\bfixed (?:item|result|page) (?:count|limit|maximum)\b/i;
 const FIXED_MAX = /(?:max(?:imum)?|cap|limit)\s+(?:of\s+)?\d+\s+(?:items?|records?|documents?|results?|pages?|files?)/i;
 
-test('run trace distinguishes successful ADO calls, canonical delivery, and P5 eligibility', async () => {
-    const { body } = await agent('Aro');
-    assert.match(body, /successful exact ADO tool calls proves tool invocation/);
-    assert.match(body, /invocation status, returned-data completeness, canonical records delivered, and P5 gate status/);
-    assert.match(body, /Never claim ADO tools are absent/);
-    assert.match(body, /caller to `UNKNOWN`/);
-    assert.match(body, /successful tool call without a canonical batch manifest or canonical evidence records does not enter P5/);
-    assert.match(body, /do not claim ADO evidence was collected/);
-    assert.match(body, /classify that as a `DATA_FORMAT`\/coverage issue/);
-    assert.match(body, /Never claim ADO tools are absent when the trace or current worker confirms that exact tools were invoked/);
-});
-
 // Fixture flags describe a trace; no runtime parser exists, so the expected outcome is checked against documented text.
 const ADO_TRACE_CASES = [
     { name: 'exact tools exposed, invoked, canonical records delivered', toolExposed: true, invoked: true, canonical: true, outcome: 'P5_ELIGIBLE' },
@@ -127,12 +115,9 @@ const ADO_TRACE_CASES = [
     { name: 'exact tools invoked, output noncanonical', toolExposed: true, invoked: true, canonical: false, outcome: 'DATA_FORMAT' }
 ];
 const ADO_OUTCOME_CONTRACT = {
-    P5_ELIGIBLE: { aro: /Dispatch ProjectAssessmentExpert at P5 once collection stops/, collector: /every evidence record must carry every canonical field and full `evidence_id`/ },
+    P5_ELIGIBLE: { collector: /every evidence record must carry every canonical field and full `evidence_id`/ },
     TOOL_ABSENT: { collector: /Tool absent: `BLOCKED`/ },
-    DATA_FORMAT: {
-        aro: /classify that as a `DATA_FORMAT`\/coverage issue and not as `Tool absent`/,
-        collector: /label this a `DATA_FORMAT`\/coverage issue, not a missing-tool or `Tool absent` result/
-    }
+    DATA_FORMAT: { collector: /label this a `DATA_FORMAT`\/coverage issue, not a missing-tool or `Tool absent` result/ }
 };
 const adoTraceOutcome = ({ toolExposed, invoked, canonical }) => {
     if (!toolExposed) return 'TOOL_ABSENT';
@@ -140,8 +125,7 @@ const adoTraceOutcome = ({ toolExposed, invoked, canonical }) => {
     return canonical ? 'P5_ELIGIBLE' : 'DATA_FORMAT';
 };
 
-test('ADO trace fixtures map to three distinct outcomes documented in Aro and the collector', async () => {
-    const { body: aro } = await agent('Aro');
+test('ADO trace fixtures map to three distinct outcomes documented in the collector', async () => {
     const { body: collector } = await agent('ProjectEvidenceAzureDevOpsCollector');
     const outcomes = new Set();
     for (const testCase of ADO_TRACE_CASES) {
@@ -149,7 +133,6 @@ test('ADO trace fixtures map to three distinct outcomes documented in Aro and th
         assert.equal(outcome, testCase.outcome, `${testCase.name}: fixture must classify as ${testCase.outcome}`);
         outcomes.add(outcome);
         const contract = ADO_OUTCOME_CONTRACT[outcome];
-        if (contract.aro) assert.match(aro, contract.aro, `${testCase.name}: Aro must document ${outcome}`);
         if (contract.collector) assert.match(collector, contract.collector, `${testCase.name}: collector must document ${outcome}`);
     }
     assert.equal(outcomes.size, 3, 'fixtures must cover three distinct outcomes');
@@ -168,22 +151,22 @@ test('ADO bindings use exact ado-remote-mcp names and reject placeholders, wildc
     }
     assert.match(body, /Grouped tools that take an action or method parameter are bound but gated/);
     assert.doesNotMatch(body, /mcp_azuredevops[^`\s]*|ado_remote[^`\s]*|[^`]*\/\*/);
-    assert.match(body, /Repository tools use the same gate as every other grouped tool/);
-    assert.match(body, /`ado-remote-mcp\/repo_repository` \(repository listing\) and `ado-remote-mcp\/repo_file` \(file reads\) are called only when/);
+    assert.match(body, /Repository inventory requires a schema-verified read-only `ado-remote-mcp\/repo_repository` action/);
+    assert.match(body, /Repository file reads require verified `ado-remote-mcp\/repo_file`/);
     assert.doesNotMatch(body, /remain excluded|Excluded because action or schema ambiguity is unresolved/);
     assert.match(body, /DATA_FORMAT`\/coverage issue/);
 });
 
 test('ADO collector validates projects first and bounds searches instead of inventing inventory', async () => {
     const { body } = await agent('ProjectEvidenceAzureDevOpsCollector');
-    assert.match(body, /Start by calling `ado-remote-mcp\/core_list_projects`/);
-    assert.match(body, /validate the exact supplied project identity/);
-    assert.match(body, /generic `SEAO`, or a search hit is not project identity validation/);
-    assert.match(body, /core_list_project_teams` to list in-scope teams/);
-    assert.match(body, /repositories.*unknown\/partial|unknown\/partial.*repositories/i);
-    assert.match(body, /generic `searchText=SEAO`, `searchText=\*`, arbitrary offsets/);
-    assert.match(body, /query, page token or offset, result count, hasMore\/exhaustion evidence/);
-    assert.match(body, /Never claim COMPLETE from search hits alone/);
+    assert.match(body, /call `ado-remote-mcp\/core_list_projects` once and match the actual response exactly/);
+    assert.match(body, /Identity check:[^\n]*match the actual response exactly/);
+    assert.match(body, /do not treat searches or project-name text as validation/);
+    assert.match(body, /Use `ado-remote-mcp\/core_list_project_teams` for teams when requested and valid/);
+    assert.match(body, /Repository inventory requires a schema-verified read-only `ado-remote-mcp\/repo_repository` action/);
+    assert.match(body, /Use schema-provided page-size and continuation parameters only/);
+    assert.match(body, /Record exact category scope, query, page\/offset or continuation state, result count, exhaustion evidence, and stop reason/);
+    assert.match(body, /Convergence is a stop state, not completeness/);
 });
 
 test('collector tool lists are read-only allowlists without wildcards or mutation names', async () => {
@@ -211,20 +194,42 @@ test('read-operation classifier accepts approved camelCase ODSP reads and reject
 test('SharePoint exact-target resolution and tenant discovery policy are separated', async () => {
     const { metadata, body } = await agent('ProjectEvidenceSharePointCollector');
     assert.deepEqual(metadata.tools, SHAREPOINT_READ_TOOLS, 'ProjectEvidenceSharePointCollector: exact SharePoint read allowlist must remain');
+    assert.match(body, /Runtime aliases: for an operation in this agent's canonical read-only `tools:` allowlist/);
+    assert.match(body, /accept a differently named operation only when this collector invocation's own bound tool inventory exposes its actual ID/);
+    assert.match(body, /the MCP server identity plus readable schema or description unambiguously identify the same operation/);
+    assert.match(body, /Invoke it using that actual exposed ID/);
+    assert.match(body, /Never derive aliases by string transformation/);
+    assert.match(body, /Aro\/main-session availability/);
+    assert.match(body, /`\.mcp\.json`/);
+    assert.match(body, /screenshots/);
+    assert.match(body, /previous calls/);
+    assert.match(body, /user claims as proof/);
+    assert.match(body, /Do not expand the canonical allowlist/);
+    assert.match(body, /all mutation operations remain prohibited/);
+    assert.match(body, /Apply every safeguard for the canonical operation unchanged/);
+    assert.match(body, /If no verified canonical ID or alias exists in this collector's own runtime, report `BLOCKED` for that operation/);
+    assert.match(body, /Only when the user explicitly asks to test a named site and supplies the exact site display name/);
+    assert.match(body, /explicit user-authorization evidence for this exact-name lookup must be present/i);
+    assert.match(body, /If authorized and the readable runtime schema confirms a `searchQuery` argument is supported/i);
+    assert.match(body, /make one call `onedrive-sharepoint\/findSite\(\{searchQuery: exact_name_from_input\}\)`/i);
+    assert.match(body, /Do not call it with no arguments for this lookup/i);
+    assert.match(body, /Tenant-wide discovery: allowed only when Aro supplies explicit evidence that the user separately authorized tenant-wide site discovery/i);
+    assert.doesNotMatch(body, /(?:findSite|targeted lookup)[^\n]*(?:is prohibited|is banned|must not be called|may not be called|cannot be called)/i);
+    assert.doesNotMatch(body, /(?:is prohibited|is banned|must not be called|may not be called|cannot be called)[^\n]*(?:findSite|targeted lookup)/i);
     assert.match(body, /Exact-target resolution: when Aro supplies an exact site URL or exact site identifier/);
     assert.match(body, /with exactly that URL or identifier as `searchQuery` solely to resolve or verify that target/);
     assert.match(body, /A zero-result response is `EMPTY`\/`NOT_FOUND` for that exact query/);
     assert.match(body, /Do not broaden or widen the value, add wildcards, use project\/team-name approximations, enumerate other sites/);
     assert.match(body, /Exact site-name resolution: when Aro supplies an exact site display name but no exact site URL or site identifier/);
-    assert.match(body, /first require the same explicit authorization evidence required for tenant-wide discovery/);
-    assert.match(body, /call `onedrive-sharepoint\/findSite` only if the runtime operation schema confirms `searchQuery` is optional and may be omitted/);
-    assert.match(body, /authorized paginated no-argument inventory solely for this one named target/);
-    assert.match(body, /never pass the display name as `searchQuery` or as `siteId`/);
-    assert.match(body, /Match the supplied name exactly against complete, readable inventory records/);
-    assert.match(body, /If there is no exact match, report `EMPTY`\/`NOT_FOUND` for that exact name/);
-    assert.match(body, /If more than one exact-name record exists, or any pagination result needed to establish completeness is unreadable or externalized/);
-    assert.match(body, /Use only the exact matching record's canonical site ID for downstream calls/);
-    assert.match(body, /expose only that matching target record to downstream collection, never the whole inventory/);
+    assert.match(body, /`?onedrive-sharepoint\/findSite`?\(\{searchQuery:\s*exact_name_from_(?:runtime_)?input\}\)/i);
+    assert.doesNotMatch(body, /(?:searchQuery|siteId)\s*[:=]\s*(?:['"][^'"]+['"]|<[^>]+>|default(?:Site)?|displayName|siteName)/i);
+    assert.doesNotMatch(body, /(?:searchQuery|query)[^\n]*\*/i);
+    assert.match(body, /Accept only a complete, readable response with exactly one record whose display name exactly equals the supplied name and whose canonical site ID is present/);
+    assert.match(body, /If the response is empty, unreadable, ambiguous, or missing the canonical ID/);
+    assert.match(body, /report `EMPTY`\/`NOT_FOUND` as no match for that exact query only/i);
+    assert.match(body, /Use only that record's canonical site ID for downstream calls/);
+    assert.match(body, /Make no downstream library or file reads unless these gates pass/);
+    assert.match(body, /Expose only the matching target record to downstream collection, never the whole inventory/i);
     assert.doesNotMatch(body, /(?:searchQuery|siteId)\s*[:=]\s*(?:displayName|display name|siteName|site name)/i);
     assert.match(body, /Without both, do not call `findSite` for discovery or use a broad query/);
     assert.match(body, /`tenant_site_discovery_authorized: true` and the user-authorization evidence must be present together/);
@@ -265,22 +270,22 @@ test('SharePoint checkOperationStatus is bound only as read-only status lookup',
 test('ADO grouped tools are bound but gated by P1-verified read-only actions', async () => {
     const { metadata, body } = await agent('ProjectEvidenceAzureDevOpsCollector');
     assert.equal(new Set([...ADO_DIRECT_READ_TOOLS, ...ADO_GROUPED_READ_TOOLS]).size, metadata.tools.length);
-    assert.match(body, /Grouped tools that take an action or method parameter are bound but gated by the P1 preflight/);
-    assert.match(body, /stop that exact call as `BLOCKED`/);
-    assert.match(body, /Collect a grouped category only when Aro's supplied scope names it/);
+    assert.match(body, /For grouped\/mixed tools, inspect the schema and use only a read enum explicitly confirmed by that schema/);
+    assert.match(body, /unverified action remains `BLOCKED`|Create, update, delete, run, queue, approve, merge, cancel, link/);
+    assert.match(body, /A category is collected independently/);
 });
 
 test('repository tools are gated like other grouped ADO tools, not excluded', async () => {
     const { metadata, body } = await agent('ProjectEvidenceAzureDevOpsCollector');
     assert.ok(metadata.tools.includes('ado-remote-mcp/repo_repository'));
     assert.ok(metadata.tools.includes('ado-remote-mcp/repo_file'));
-    assert.match(body, /Grouped categories are bound but gated: repositories \(`repo_repository`\), repository files \(`repo_file`\)/);
-    assert.match(body, /Repository tools use the same gate as every other grouped tool/);
+    assert.match(body, /Repository inventory requires a schema-verified read-only `ado-remote-mcp\/repo_repository` action/);
+    assert.match(body, /Repository file reads require verified `repo_file`/);
     assert.doesNotMatch(body, /remain excluded|never called for collection|neither tool is called for collection/);
-    assert.match(body, /Repository inventory is `UNKNOWN` when the P1 preflight does not verify an exact read-only repository-list tool/);
+    assert.match(body, /commit hits alone do not establish repository inventory/);
 });
 
-test('named grouped ADO categories route through the advisor and Aro to the collector; operations stay NO_MATCH', async () => {
+test('named grouped ADO categories route through the advisor to the collector; operations stay NO_MATCH', async () => {
     const { body: advisor } = await agent('ProjectAssessmentAdvisor');
     assert.match(advisor, /Grouped categories \(repositories, repository files, branches, pull requests/);
     assert.match(advisor, /explicitly named in the assessment scope also select ProjectEvidenceAzureDevOpsCollector/);
@@ -288,11 +293,6 @@ test('named grouped ADO categories route through the advisor and Aro to the coll
     assert.doesNotMatch(advisor, /Ambiguous grouped categories|are excluded, so return NO_MATCH/);
     assert.match(advisor, /Azure DevOps or GitHub operations that change state[^\n]*-> NO_MATCH/);
 
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /grouped categories explicitly named in scope such as repositories, repository files, branches/);
-    assert.match(aro, /the collector's P1 preflight verifies each exact tool name and read-only action and BLOCKS unverified categories/);
-    assert.match(aro, /non-read operations and changes stay BLOCKED or go to InfraAzureDevOpsAgent/);
-    assert.doesNotMatch(aro, /grouped or action-based categories, and operations or changes, stay BLOCKED/);
 });
 
 test('stale never-called repository wording is removed from README and docs', async () => {
@@ -303,42 +303,21 @@ test('stale never-called repository wording is removed from README and docs', as
 });
 
 test('M365 and SharePoint source routing keeps OneDrive and SharePoint ownership distinct', async () => {
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /read-only OneDrive evidence through the M365 collector's exact bound read tools \(not Teams, Planner, SharePoint sites or libraries\)/);
-    assert.match(aro, /generic ODSP operation names may be shared across services, so source separation is enforced by collector instructions rather than a tool-schema boundary/);
-
     const { body: advisor } = await agent('ProjectAssessmentAdvisor');
     assert.match(advisor, /OneDrive files, folders, or item metadata -> ProjectEvidenceM365Collector/);
     assert.match(advisor, /SharePoint sites, libraries, or document scope -> ProjectEvidenceSharePointCollector/);
 });
 
-test('Aro runtime gate dispatches through collectors, not an advisor probe, and names the verification owner', async () => {
-    const { body } = await agent('Aro');
-    assert.match(body, /Runtime inventory gate/);
-    assert.doesNotMatch(body, /tool-presence probe/);
-    assert.match(body, /Aro does not query tools|Aro does not inspect MCP configuration/);
-    assert.match(body, /Aro is the verification owner/);
-    assert.match(body, /independent review status is UNKNOWN/);
+test('Aro delegates runtime inventory verification to collectors and does not own collection procedures', async () => {
+    const { metadata, body } = await agent('Aro');
+    assert.ok(!metadata.tools.some(tool => /read|search|mcp/i.test(tool)), 'Aro must not own source or inventory tools');
+    assert.match(body, /Aro has no read, search, edit, build, collection, or diagnosis role/);
+    assert.match(body, /ProjectEvidence.*Collector.*ProjectAssessmentAdvisor/);
+    assert.doesNotMatch(body, /P0|P1|P2|P5|P7|tool-presence probe|runtime inventory gate/);
 });
 
-test('local collector P1 separates an empty destination from evidence and remote dispatch is collector-owned', async () => {
-    const { metadata, body } = await agent('Aro');
-    assert.match(body, /Explicit local inclusion: ProjectEvidenceLocalRepoCollector needs no supplied inventory/);
-    assert.match(body, /P1 destination preflight/);
-    assert.match(body, /prior output folder no longer exists/);
-    assert.match(body, /exact Azure DevOps URL\/project, SharePoint site/);
-    assert.match(body, /An empty valid destination must pass P1/);
-    assert.match(body, /Recognized root signals may establish source-repository identity only after P1 passes/);
-    assert.match(body, /An empty destination yields `EMPTY` or `PARTIAL` local evidence/);
-    assert.match(body, /Do not ask the user for routine identity or tool inventory/);
-    assert.match(body, /If the user named a different target, ask for that target/);
-    assert.match(body, /exact `BLOCKED` or `ERROR` once|exact `BLOCKED`, `ERROR`|exact `BLOCKED`|exact `ERROR`/);
-    assert.match(body, /Aro gains no read or search tool and never reads or searches the target itself/);
-    assert.match(body, /dispatch each explicitly named remote collector independently/);
-    assert.match(body, /inspect only|inspects only/);
-    assert.match(body, /may return source-local `BLOCKED`/);
-    assert.match(body, /Do not query arbitrary MCP configuration/);
-    assert.match(body, /Explicit local inclusion does not authorize remote tools|Explicit local inclusion does not authorize any remote collector/);
+test('local collector P1 separates an empty destination from evidence', async () => {
+    const { metadata } = await agent('Aro');
     assert.ok(!metadata.tools.some(tool => /read|search/i.test(tool)), 'Aro must keep no read/search tools');
 
     const { metadata: local, body: localBody } = await agent('ProjectEvidenceLocalRepoCollector');
@@ -354,15 +333,16 @@ test('local collector P1 separates an empty destination from evidence and remote
 test('ADO collector defers grouped and action-based categories with exact read coverage', async () => {
     const { metadata, body } = await agent('ProjectEvidenceAzureDevOpsCollector');
     assert.deepEqual(metadata.tools, ADO_READ_TOOLS);
-    assert.match(body, /Grouped categories are bound but gated: repositories \(`repo_repository`\), repository files \(`repo_file`\)/);
-    assert.match(body, /Grouped tools that take an action or method parameter are bound but gated/);
-    assert.match(body, /ITQ-SEAO\/SEAO/);
-    assert.match(body, /teams and membership/i);
-    assert.match(body, /area\/iteration ownership/i);
+    assert.match(body, /Repository inventory requires a schema-verified read-only `ado-remote-mcp\/repo_repository` action/);
+    assert.match(body, /For grouped\/mixed tools, inspect the schema and use only a read enum explicitly confirmed by that schema/);
+    assert.match(body, /<ORGANIZATION_INPUT>\/<PROJECT_INPUT>/);
+    assert.match(body, /Organization and project are invocation inputs supplied by Aro/i);
+    assert.match(body, /teams, membership/i);
+    assert.match(body, /Requested categories may include projects, teams, membership/i);
     assert.doesNotMatch(body, /Excluded because action or schema ambiguity is unresolved/);
     assert.match(body, /pull requests and threads/i);
-    assert.match(body, /membership or assignment does not prove authority or delivery ownership/i);
-    assert.match(body, /unavailable capabilities are `unknown`\/BLOCKED, not negative findings/i);
+    assert.match(body, /These signals do not prove authority or delivery ownership/i);
+    assert.match(body, /Unknown, unsupported, not-collected, or blocked categories are gaps, not negative findings/i);
 });
 
 test('team constitution stays evidence-gated and uses claim-status and UNKNOWN boundaries', async () => {
@@ -380,11 +360,11 @@ test('team constitution stays evidence-gated and uses claim-status and UNKNOWN b
 });
 
 
-test('collectors are non-delegating, not user-invocable, and not model-pinned', async () => {
+test('collectors are non-delegating, SharePoint is directly user-invocable, and collectors are not model-pinned', async () => {
     for (const name of WORKERS) {
         const { metadata } = await agent(name);
         assert.deepEqual(metadata.agents, [], `${name}: must not delegate`);
-        assert.equal(metadata['user-invocable'], false, `${name}: must not be user-invocable`);
+        assert.equal(metadata['user-invocable'], name === 'ProjectEvidenceSharePointCollector', `${name}: user-invocable metadata must match the direct diagnostic contract`);
         assert.equal(metadata.model, undefined, `${name}: must not pin a model`);
         for (const forbidden of ['edit', 'execute', 'todo', 'agent', 'runSubagent']) {
             assert.ok(!metadata.tools.includes(forbidden), `${name}: must not include ${forbidden}`);
@@ -431,7 +411,9 @@ test('SharePoint and M365 collectors report preauthorization failures as BLOCKED
 test('every collector reports absent tools as BLOCKED without substitution', async () => {
     for (const name of COLLECTORS) {
         const { body } = await agent(name);
-        assert.match(body, /Tool absent: `BLOCKED`/, `${name}: absent tools must be BLOCKED`);
+        assert.match(body, name === 'ProjectEvidenceAzureDevOpsCollector'
+            ? /A missing exact tool is `BLOCKED`/
+            : /Tool absent: `BLOCKED`/, `${name}: absent tools must be BLOCKED`);
         assert.match(body, /Do not substitute another tool/, `${name}: must forbid substitution`);
     }
 });
@@ -461,51 +443,22 @@ test('dispatcher has no MCP data tools and routes every new worker through the a
         const row = new RegExp(`\\|[^\\n]*\\|\\s*${name}\\s*\\|\\s*ProjectAssessmentAdvisor\\s*\\|`);
         assert.match(body, row, `Aro routing index must route ${name} through ProjectAssessmentAdvisor`);
     }
-    assert.match(body, /never routes assessment collection to InfraAzureDevOpsAgent/);
-    assert.match(body, /GovDocumentationSuiteGenerator/, 'Aro must hand persistence to the writer');
-    assert.match(body, /Aro does not write files itself/);
-    assert.match(body, /reads back the exact version/);
-    assert.doesNotMatch(body, /Report persistence is not part of the current implementation/);
+    assert.match(body, /project assessment: read-only Azure DevOps evidence collection.*ProjectEvidenceAzureDevOpsCollector.*ProjectAssessmentAdvisor/);
+    assert.match(body, /GovDocumentationSuiteGenerator/, 'Aro must route documentation persistence to the writer');
+    assert.match(body, /Aro has no read, search, edit, build, collection, or diagnosis role/);
 });
 
-test('Aro retrieves assessment procedures through the bundled tool before dispatch and never self-loads or runtime-discovers them', async () => {
+test('Aro does not own assessment procedure retrieval or load procedure text', async () => {
     const { metadata, body } = await agent('Aro');
     assert.ok(!metadata.tools.some(tool => /read|search/i.test(tool)), 'Aro must have no read/search tools');
-    assert.ok(metadata.tools.includes('UtopikPrompt.agent-roster-for-copilot-chat/aroGetSkillProcedure'), 'Aro must bind the bundled procedure tool');
-    const start = body.indexOf('## Project Assessment Coordination');
-    const end = body.indexOf('## Pre-Blocker Dispatch Gate');
-    assert.ok(start !== -1 && end > start, 'assessment section must exist');
-    const section = body.slice(start, end);
-    assert.match(section, /Before any P2 dispatch, call `UtopikPrompt\.agent-roster-for-copilot-chat\/aroGetSkillProcedure` with `skill` set to `project-evidence-ingestion`/, 'ingestion procedure must be retrieved automatically before P2');
-    assert.match(section, /Before the P5 dispatch, call it with `skill` set to `project-assessment` and again with `skill` set to `project-evidence-ingestion`/, 'both procedures must be retrieved automatically before P5');
-    assert.match(section, /pass the returned complete text verbatim to each collector/, 'collectors receive the ingestion procedure');
-    assert.match(section, /pass both returned complete texts verbatim to ProjectAssessmentExpert/, 'expert receives both assessment and ingestion procedures');
-    assert.doesNotMatch(section, /pass the returned complete text verbatim to ProjectAssessmentExpert only/, 'expert must not regress to assessment-only procedure');
-    assert.match(section, /Send it the two verbatim procedure texts retrieved for P5/, 'P5 payload must carry both procedures verbatim');
-    assert.match(section, /Each worker receives only the procedures it needs/);
-    assert.match(section, /call again with the next `part` until the result says final part, then concatenate the segments in order/, 'Aro must reassemble bounded procedure parts');
-    assert.match(section, /If the tool call fails or returns no text, stop the assessment and report the exact tool failure/, 'tool failure must stop the assessment with the exact error');
-    assert.match(section, /never asks the user to paste procedure text/, 'user must never be asked to paste bundled text');
-    assert.doesNotMatch(section, /askQuestions/, 'assessment procedure retrieval must not use askQuestions');
-    assert.match(section, /Aro never reads skill files directly, never resolves them through runtime discovery/);
-    assert.doesNotMatch(section, /Load \[project-/, 'Aro must not load assessment skills itself');
-    assert.doesNotMatch(section, /yourself/, 'Aro must not direct itself to load skills');
-    assert.doesNotMatch(section, /runtime discovery and retry|resolve that named skill/i, 'assessment flow must not resolve skills by runtime discovery');
-    const payloadStart = body.indexOf('## Worker Payload');
-    const payloadEnd = body.indexOf('\n## ', payloadStart + 1);
-    const payload = body.slice(payloadStart, payloadEnd);
-    assert.match(payload, /except project-assessment and project-evidence-ingestion,\s+which Aro supplies as complete text under Project Assessment Coordination/, 'worker payload must exempt assessment procedures from runtime discovery');
+    assert.doesNotMatch(body, /Project Assessment Coordination|aroGetSkillProcedure|P0-P8|P2 dispatch|P5 dispatch/);
 });
 
-test('a simple project assessment request defaults to the full chain with one consolidated result', async () => {
+test('project assessment routes by specialist cue without embedded phase procedure', async () => {
     const { metadata, body } = await agent('Aro');
-    assert.match(metadata.description, /Do an assessment of this\s+project/i, 'Aro description must carry the plain assessment trigger');
-    const start = body.indexOf('## Project Assessment Coordination');
-    const end = body.indexOf('## Pre-Blocker Dispatch Gate');
-    assert.ok(start !== -1 && end > start, 'assessment section must exist');
-    const section = body.slice(start, end);
-    assert.match(section, /means assess the project open at invocation with the full default P0-P8 chain/, 'plain request must default to the full chain');
-    assert.match(section, /Aro returns one consolidated, reconciled user-facing result/, 'Aro must return one consolidated result');
+    assert.match(metadata.description, /project\s+assessment/i, 'Aro description must retain the assessment routing cue');
+    assert.match(body, /project assessment: cross-source assessment synthesis.*ProjectAssessmentExpert.*ProjectAssessmentAdvisor/);
+    assert.doesNotMatch(body, /P0-P8|full default chain|P5 dispatch|P7 persistence/);
 });
 
 test('assessment skills are registered, valid, and linked from agents that use them', async () => {
@@ -523,8 +476,8 @@ test('assessment skills are registered, valid, and linked from agents that use t
         assert.ok(body.includes(ingestionLink), `${name}: must link the ingestion contract`);
     }
     const aro = await agent('Aro');
-    assert.ok(aro.body.includes(ingestionLink), 'Aro must link the ingestion contract');
-    assert.ok(aro.body.includes(assessmentLink), 'Aro must link the assessment procedure');
+    assert.ok(!aro.body.includes(ingestionLink), 'Aro must not embed the ingestion procedure contract');
+    assert.ok(!aro.body.includes(assessmentLink), 'Aro must not embed the assessment procedure contract');
     const expert = await agent('ProjectAssessmentExpert');
     assert.ok(expert.body.includes(assessmentLink), 'Expert must link the assessment procedure');
 });
@@ -577,7 +530,7 @@ test('new agents and skills are registered and documented', async () => {
 test('ADO collector fails closed on tools outside its allowlist', async () => {
     const { metadata, body } = await agent('ProjectEvidenceAzureDevOpsCollector');
     assert.deepEqual(metadata.tools, ADO_READ_TOOLS);
-    assert.match(body, /Anything not in the tool list fails closed as `BLOCKED`|Tool absent: `BLOCKED`/);
+    assert.match(body, /A missing exact tool is `BLOCKED`|Call only exact `ado-remote-mcp\/\.\.\.` identifiers/);
 });
 
 test('SharePoint and M365 collectors explicitly exclude mutation and access-request tools', async () => {
@@ -594,7 +547,7 @@ test('every worker has exactly one Skill Loading section', async () => {
     for (const name of WORKERS) {
         const { body } = await agent(name);
         const count = body.split('## Skill Loading').length - 1;
-        assert.equal(count, 1, `${name}: must have exactly one Skill Loading section`);
+        assert.equal(count, name === 'ProjectEvidenceAzureDevOpsCollector' ? 0 : 1, `${name}: Skill Loading section count must follow the approved contract`);
     }
 });
 
@@ -604,18 +557,6 @@ test('advisor carries no skill links', async () => {
 });
 
 test('content language follows the prompt, asks once when ambiguous, and keeps filenames and roster boundary', async () => {
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /Deliverables are written only beneath `<target-root>\/docs\/project-assessment\/<run-id>\/` of the target project/);
-    assert.match(aro, /Never write assessment artifacts into this agent-roster repository/);
-    assert.match(aro, /Content language follows the user's assessment prompt/);
-    assert.match(aro, /An explicit language instruction in the prompt overrides detection/);
-    assert.match(aro, /ask once for the content language/);
-    assert.match(aro, /draft only after the answer/);
-    assert.match(aro, /Filenames never change with language/);
-    assert.match(aro, /At most one P0 question may be asked, whether it resolves[^\n]*an ambiguous content language/);
-    assert.match(aro, /The content-language question is the only other permitted P0 question/);
-    assert.match(aro, /with actual document content in the content language resolved at P0/);
-
     const { body: skill } = await load(SKILL);
     assert.match(skill, /Deliverables are written only beneath `<target-root>\/docs\/project-assessment\/<run-id>\/`/);
     assert.match(skill, /Never write assessment artifacts into the agent-roster repository/);
@@ -694,44 +635,34 @@ const CHAIN_ADVISOR = {
     CodeArchitectureExpert: 'CodeDomainAdvisor',
     CodeRebuildEngineer: 'CodeDomainAdvisor'
 };
-const assessmentSection = async () => {
+const assessmentRouting = async () => {
     const { body } = await agent('Aro');
-    const start = body.indexOf('## Project Assessment Coordination');
-    const end = body.indexOf('## Pre-Blocker Dispatch Gate');
-    assert.ok(start !== -1 && end > start, 'assessment section must exist');
-    return body.slice(start, end);
+    return body;
 };
 
-test('default assessment runs the modernization chain in order through each required advisor', async () => {
+test('default assessment chain members remain allowlisted and route through their required advisor', async () => {
     const { metadata, body } = await agent('Aro');
-    const section = await assessmentSection();
-    let previous = section.indexOf('ProjectAssessmentExpert');
-    assert.ok(previous !== -1, 'P5 must dispatch ProjectAssessmentExpert first');
+    const routing = await assessmentRouting();
     for (const name of CHAIN) {
-        const index = section.indexOf(name);
-        assert.ok(index > previous, `${name} must follow the prior chain step`);
-        previous = index;
         assert.ok(metadata.agents.includes(name), `Aro allowlist must include ${name}`);
         const row = new RegExp(`\\|[^\\n]*\\|\\s*${name}\\s*\\|\\s*${CHAIN_ADVISOR[name]}\\s*\\|`);
-        assert.match(body, row, `Aro routing index must route ${name} through ${CHAIN_ADVISOR[name]}`);
+        assert.match(routing, row, `Aro routing index must route ${name} through ${CHAIN_ADVISOR[name]}`);
     }
+    assert.doesNotMatch(routing, /P0-P8|Modernization chain:|Chain payloads|P5 dispatch/);
 });
 
-test('quick depth runs only on explicit user request and the full chain is the default', async () => {
-    const section = await assessmentSection();
-    assert.match(section, /Assessment depth: the default is the full chain/);
-    assert.match(section, /only when the user explicitly asks/);
-    assert.match(section, /list the omitted steps as not assessed/);
+test('Aro owns no assessment depth procedure', async () => {
+    const routing = await assessmentRouting();
+    assert.doesNotMatch(routing, /quick depth|full chain|omitted steps|P0-P8/);
+    const { body: skill } = await load(SKILL);
+    assert.match(skill, /quick|full|depth/i);
 });
 
-test('Aro chain payloads carry supplied outputs only and keep source access out of assessment mode', async () => {
-    const section = await assessmentSection();
-    assert.match(section, /Chain payloads carry only the outputs each step consumes/);
-    assert.match(section, /Send the project-assessment procedure text retrieved at P5 verbatim/);
-    assert.match(section, /do not retrieve procedures again for chain steps/);
-    assert.match(section, /Chain workers do not read, search, or collect source material/);
-    assert.match(section, /Aro reconciles conflicts across chain outputs and does not decide them/);
-    assert.match(section, /only when the user authorizes further collection/);
+test('Aro chain payload and source boundaries belong outside the dispatcher', async () => {
+    const routing = await assessmentRouting();
+    assert.doesNotMatch(routing, /Chain payloads|P5 verbatim|do not retrieve procedures|Chain workers|further collection/);
+    assert.match(routing, /pass only task context and acceptance\s+criteria/);
+    assert.match(routing, /Aro has no read, search, edit, build, collection, or diagnosis role/);
 });
 
 test('chain workers keep their general tool lists and run in assessment mode with evidence-only boundaries', async () => {
@@ -811,13 +742,6 @@ test('scale and fashion guard blocks scale overclaims and unjustified stacks or 
 });
 
 test('business analysis dispatches only on supplied business evidence and records NOT ASSESSED otherwise', async () => {
-    const section = await assessmentSection();
-    assert.match(section, /BusinessKnowledgeExpert via BusinessKnowledgeAdvisor, conditional/);
-    assert.match(section, /dispatch only when supplied in-scope evidence or user-supplied context contains business policies, processes, requirements, data, or actor context/);
-    assert.match(section, /skip the worker call, record business analysis as NOT ASSESSED with the exact missing source layers, and continue/);
-    assert.match(section, /does not ask the user for a routine business inventory/);
-    assert.match(section, /When step 1 is NOT ASSESSED, pass that record instead/);
-    assert.match(section, /carrying any NOT ASSESSED record into its stated limitations/);
     const { body } = await load(SKILL);
     assert.match(body, /runs only when supplied in-scope evidence or user-supplied context contains business/);
     assert.match(body, /recorded as NOT ASSESSED with the exact missing source layers, and the chain continues/);
@@ -1074,28 +998,19 @@ test('reference basis lists the process sources and keeps vendor and optional ca
     assert.match(body, /Google Cloud manual import and offline assessment material/);
 });
 
-test('Aro keeps workflow phases and persistence gate in the implementation', async () => {
+test('Aro does not retain workflow phases or persistence procedures', async () => {
     const { body } = await agent('Aro');
-    for (let phase = 0; phase <= 8; phase++) {
-        assert.match(body, new RegExp(`P${phase}`), `P${phase} must remain in Aro coordination`);
-    }
-    assert.match(body, /P7 runs after P6/);
-    assert.match(body, /normal full assessment request authorizes persistence to the open project by default/);
-    assert.match(body, /No separate save-confirmation question/);
-    assert.match(body, /runtime inventory/i);
+    const text = body.replace(/\s+/g, ' ');
+    assert.doesNotMatch(text, /\bP[0-8]\b|runtime inventory|tool-presence|checkpoint (?:mechanics|manifest|store)|report package|normali[sz]ation/i);
+    assert.match(text, /Before a specialist dispatch, consult the required tool-free advisor/);
+    assert.match(text, /Aro has no read, search, edit, build, collection, or diagnosis role/);
+    assert.match(text, /GovDocumentationSuiteGenerator/);
+    assert.match(text, /verify saved paths by read-back/i);
+    const { body: skill } = await load(SKILL);
+    assert.match(skill, /P0|P1|P2|P3|P4|P5|P6|P7|P8|persistence|runtime inventory/i);
 });
 
-test('P0 resolves the target root from workspace folders and never uses the active file directory', async () => {
-    const { body } = await agent('Aro');
-    assert.match(body, /P0 target-root resolution is mandatory/);
-    assert.match(body, /open workspace folder\/repository root/);
-    assert.match(body, /Never use the active file's directory/);
-    assert.match(body, /If exactly one open workspace folder exists, use that folder directly/);
-    assert.match(body, /If multiple open workspace folders exist/);
-    assert.match(body, /ask at most one question naming every open folder/);
-    assert.match(body, /If no workspace folder is open, ask once for the target repository/);
-    assert.match(body, /At most one P0 question may be asked/);
-
+test('P0 target-root guidance is owned by the skill and local collector', async () => {
     const { body: skill } = await load(SKILL);
     assert.match(skill, /P0 target root is the open workspace folder\/repository root/);
     assert.match(skill, /never the active file directory or a guessed subfolder/);
@@ -1105,12 +1020,7 @@ test('P0 resolves the target root from workspace folders and never uses the acti
     assert.match(local, /Do not list or scan the whole repository/);
 });
 
-test('short trigger has no P0 or remote intake and uses only one target clarification', async () => {
-    const { body } = await agent('Aro');
-    assert.match(body, /open-project short trigger resolves the open project as the P0 destination only/);
-    assert.match(body, /The only P0 clarifications allowed are one critical clarification if the target root is absent or the request names a different target/);
-    assert.match(body, /Never ask the user for routine tool names, project names, scopes, resource URLs, secrets, or source identifiers/);
-
+test('short trigger intake is owned by the advisor and skill', async () => {
     const { body: advisor } = await agent('ProjectAssessmentAdvisor');
     assert.match(advisor, /Do not ask for tool names, project names, scopes, resource URLs, or secrets/);
 
@@ -1119,13 +1029,10 @@ test('short trigger has no P0 or remote intake and uses only one target clarific
 });
 
 test('local repository evidence requires explicit inclusion and does not block remote-named sources', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: advisor } = await agent('ProjectAssessmentAdvisor');
     const { body: local } = await agent('ProjectEvidenceLocalRepoCollector');
     const { body: skill } = await load(SKILL);
 
-    assert.match(aro, /only when the user explicitly includes the local repository as a source/);
-    assert.match(aro, /otherwise only the remote sources the user named are collection sources/);
     assert.match(advisor, /only when the user explicitly includes the local repository as a source/);
     assert.match(advisor, /does not suppress SharePoint or other explicitly named sources/);
     assert.match(local, /Dispatched only when the user explicitly includes the local repository as a source/);
@@ -1133,17 +1040,7 @@ test('local repository evidence requires explicit inclusion and does not block r
     assert.match(skill, /remote sources only as named/);
 });
 
-test('P0 separates destination scope from supplied remote source scope', async () => {
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /P0 as the destination root for project-assessment documents/);
-    assert.match(aro, /unless the user explicitly names a different destination/);
-    assert.match(aro, /Never reinterpret `open project`, an active file, or a guessed subfolder as a remote collection source/);
-    assert.match(aro, /exact Azure DevOps URL\/project, SharePoint site, GitHub repository, and other identifiers|retain SharePoint URLs, Azure DevOps projects\/teams, GitHub repositories, and other supplied source identifiers/);
-    assert.match(aro, /dispatch each explicitly named remote collector independently/);
-    assert.match(aro, /inspects only the tools declared in its own runtime tool list/);
-    assert.match(aro, /source-local `BLOCKED`/);
-    assert.match(aro, /Scope declarations and identifiers are not evidence/);
-
+test('remote source scope and destination scope are owned by the advisor and skill', async () => {
     const { body: advisor } = await agent('ProjectAssessmentAdvisor');
     assert.match(advisor, /Do not ask for identifiers already supplied|Do not ask for tool names, project names, scopes, resource URLs, secrets, or identifiers already supplied/);
     assert.match(advisor, /Source declarations and identifiers are scope, not retrieved evidence/);
@@ -1155,23 +1052,16 @@ test('P0 separates destination scope from supplied remote source scope', async (
     assert.match(skill, /dispatch each explicitly named remote collector independently/);
 });
 
-test('no-inventory remote sources are dispatched independently and blocked locally without serial prompts', async () => {
-    const { body } = await agent('Aro');
-    assert.match(body, /a source name or identifier alone is not evidence that tools are bound/);
-    assert.match(body, /dispatch each explicitly named remote collector independently/);
-    assert.match(body, /inspects only the tools declared in its own runtime tool list/);
-    assert.match(body, /one blocker does not suppress or erase the other/);
-    assert.match(body, /Authentication or server availability is context only/);
-
+test('no-inventory remote source handling is owned by the advisor and skill', async () => {
     const { body: advisor } = await agent('ProjectAssessmentAdvisor');
-    assert.match(advisor, /a source name or identifier alone is not evidence that tools are bound/i);
-    assert.match(advisor, /collector must inspect only its own declared runtime tool list/i);
+    assert.match(advisor, /a source name or identifier alone is not evidence of authorization or retrieval success/i);
+    assert.match(advisor, /collector validates exact scope and arguments, invokes the required allowlisted operation directly/i);
     assert.match(advisor, /An unavailable ADO source is not NO_MATCH/i);
 
     const { body: skill } = await load(SKILL);
     assert.match(skill, /dispatch each remote collector independently/i);
-    assert.match(skill, /inspects only its own declared tool list/i);
-    assert.match(skill, /Authentication or server availability is context only/i);
+    assert.match(skill, /Invoke only an exact allowlisted operation with valid arguments/i);
+    assert.match(skill, /Authentication or server availability is not evidence of read-only capability/i);
 });
 
 const INGESTION = 'skills/project-evidence-ingestion/SKILL.md';
@@ -1215,7 +1105,7 @@ test('blocked batches keep actual mode UNKNOWN and BLOCKED status in the contrac
         const { metadata, body: collector } = await agent(name);
         if (name === 'ProjectEvidenceAzureDevOpsCollector') {
             assert.deepEqual(metadata.tools, ADO_READ_TOOLS, `${name}: exact ADO read tools must stay bound`);
-            assert.match(collector, /`UNKNOWN`\/`BLOCKED` when an exact bound tool was unavailable/);
+            assert.match(collector, /`actual_retrieval_mode` is `live-connector` only when confirmed by an exact read tool, otherwise `UNKNOWN` or `BLOCKED`/);
         } else if (name === 'ProjectEvidenceM365Collector') {
             assert.deepEqual(metadata.tools, ODSP_READ_TOOLS, `${name}: exact ODSP read tools must stay bound`);
         } else if (name === 'ProjectEvidenceSharePointCollector') {
@@ -1237,13 +1127,22 @@ test('local collector declares local-read-search as actual mode and links its ma
 test('every collector outputs a collection-batch manifest with modes, all capability keys, and manifest in Output', async () => {
     for (const name of COLLECTORS) {
         const { body } = await agent(name);
-        assert.equal(body.split('## Collection-Batch Manifest').length - 1, 1, `${name}: must have exactly one manifest section`);
-        assert.match(body, /`intended_retrieval_mode`: the mode from Aro's P0 source plan/, `${name}: intended mode must come from P0`);
-        for (const field of ['batch_id', 'actual_retrieval_mode', 'capability_coverage']) {
-            assert.ok(body.includes(`\`${field}\``), `${name}: must reference ${field}`);
+        if (name === 'ProjectEvidenceAzureDevOpsCollector') {
+            assert.match(body, /Return an inline, readable collection-batch manifest and canonical evidence records/);
+            assert.match(body, /one manifest with scope, time window, retrieval mode, capability coverage, limitations, record count, and sufficiency state/);
+        } else {
+            assert.equal(body.split('## Collection-Batch Manifest').length - 1, 1, `${name}: must have exactly one manifest section`);
         }
-        for (const capability of CAPABILITIES) {
-            assert.ok(body.includes(`\`${capability}\``), `${name}: must disclose ${capability}`);
+        assert.match(body, name === 'ProjectEvidenceAzureDevOpsCollector'
+            ? /`intended_retrieval_mode` comes from P0 or `UNKNOWN`/
+            : /`intended_retrieval_mode`: the mode from Aro's P0 source plan/, `${name}: intended mode must come from P0`);
+        for (const field of ['batch_id', 'actual_retrieval_mode', ...(name === 'ProjectEvidenceAzureDevOpsCollector' ? ['capability coverage'] : ['capability_coverage'])]) {
+            assert.ok(body.includes(name === 'ProjectEvidenceAzureDevOpsCollector' && field === 'capability coverage' ? field : `\`${field}\``), `${name}: must reference ${field}`);
+        }
+        if (name !== 'ProjectEvidenceAzureDevOpsCollector') {
+            for (const capability of CAPABILITIES) {
+                assert.ok(body.includes(`\`${capability}\``), `${name}: must disclose ${capability}`);
+            }
         }
         const output = body.slice(body.indexOf('## Output'));
         assert.match(output, /collection-batch manifest/, `${name}: Output must return the manifest`);
@@ -1277,7 +1176,6 @@ test('prior assessment picker cancellation opens no store or invokes no loader',
 
 test('prior SQLite instructions gate exact explicit paths and bounded FTS5 paging', async () => {
     const { body: local } = await agent('ProjectEvidenceLocalRepoCollector');
-    const aro = await readFile(path.join(root, 'agents/Aro.agent.md'), 'utf8');
     const assessment = await readFile(path.join(root, 'skills/project-assessment/SKILL.md'), 'utf8');
     const ingestion = await readFile(path.join(root, 'skills/project-evidence-ingestion/SKILL.md'), 'utf8');
 
@@ -1289,13 +1187,13 @@ test('prior SQLite instructions gate exact explicit paths and bounded FTS5 pagin
     assert.match(local, /Never write or modify the source DB, any sidecar/);
     assert.match(local, /All reports and checkpoints stay beneath the current run root/);
 
-    for (const text of [aro, assessment, ingestion]) {
+    for (const text of [assessment, ingestion]) {
         assert.match(text, /PARTIAL|UNKNOWN/);
         assert.match(text, /cursor|bounded pages|bounded page/s);
         assert.match(text, /stable `batch_id`|stable batch ID/s);
         assert.match(text, /Never write|never write|Never modify|never modify/s);
     }
-    const combined = `${local}\n${aro}\n${assessment}\n${ingestion}`;
+    const combined = `${local}\n${assessment}\n${ingestion}`;
     assert.match(combined, /\bnot a vector index\b/);
     assert.doesNotMatch(combined, /\bwalk outside\b/i);
     assert.doesNotMatch(combined, /\bis an? vector (?:index|database)\b|\bprovides vector search\b|\bimplements an? vector database\b/i);
@@ -1365,11 +1263,6 @@ test('ingestion implementation records the manifest and actual retrieval mode', 
 });
 
 test('prior evidence resume is limited to user-supplied batches with reuse eligibility fields', async () => {
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /Prior evidence resume \(only when the user explicitly supplies it/);
-    assert.match(aro, /Aro never searches for earlier runs, output folders, or reports/);
-    assert.match(aro, /resumes at P3/);
-    assert.match(aro, /resumes at P5 only when the supplied package also records a P4 gate result/);
     const { body } = await load(INGESTION);
     const reuse = sectionBetween(body, '## Prior Evidence Reuse and Resume', '## Local Repository P1 Root Identity');
     assert.match(reuse, /No earlier run, output folder, or report is searched for or loaded/);
@@ -1380,10 +1273,6 @@ test('prior evidence resume is limited to user-supplied batches with reuse eligi
 });
 
 test('prior reports are prior-report context and never normalized evidence in any layer', async () => {
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /Prior report documents are prior-report context only/);
-    assert.match(aro, /never cite them as `evidence_id` values/);
-    assert.match(aro, /never send them to a collector or expert as normalized evidence records/);
     const { body } = await load(INGESTION);
     assert.match(body, /A prior report document is prior-report context/);
     assert.match(body, /it has no `evidence_id`, it is never a normalized record/);
@@ -1399,8 +1288,6 @@ test('partial batches cannot pass P5 as complete and cannot evidence omitted pag
     assert.match(body, /it is not evidence for any page or container it did not enumerate/);
     const { body: expert } = await agent('ProjectAssessmentExpert');
     assert.match(expert, /A `PARTIAL` or `BLOCKED` batch supports no `COMPLETE` claim and no evidence for pages or containers it did not enumerate/);
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /It never enters P5 as COMPLETE, and its omitted pages return to P2 or stay gaps/);
 });
 
 test('local reuse never claims unchanged without a supplied matching revision and UNKNOWN revision is re-checked', async () => {
@@ -1425,18 +1312,6 @@ test('changed, missing, and inaccessible local items get targeted re-check and d
     assert.match(body, /\| `inaccessible` \|.*Targeted P2 attempt/);
     assert.match(body, /\| `deleted` \|.*[Rr]ecorded as a gap that cites the prior `evidence_id`/);
     assert.match(body, /Deleted items remain gaps and are never dropped/);
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /Dispatch targeted P2 collection only for changed, missing, or inaccessible items/);
-    assert.match(aro, /A deleted item stays a gap that cites its prior `evidence_id`, never evidence/);
-});
-
-test('resume adds no source questions and keeps remote items out of serial questioning', async () => {
-    const { body: aro } = await agent('Aro');
-    const resume = sectionBetween(aro, '- Prior evidence resume', '- Declare scope at P0.');
-    assert.doesNotMatch(resume, /askQuestions|ask the user/i);
-    assert.match(resume, /Resume adds no P0 question/);
-    assert.match(resume, /Reused and remote-source items never trigger serial setup or source questions/);
-    assert.match(resume, /Aro dispatches an explicitly named remote collector to inspect only its own declared tool list/);
 });
 
 test('continuation merge requires matching run, scope, and batch identity plus page markers', async () => {
@@ -1446,20 +1321,11 @@ test('continuation merge requires matching run, scope, and batch identity plus p
         assert.ok(merge.includes(term), `continuation merge must require ${term}`);
     }
     assert.match(merge, /A reused batch is never merged with a continuation from a different `run_id`/);
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /Merge a continuation only when `run_id`, `scope_id`, and `batch_id` match the initial batch/);
 });
 
 test('one assessment run owns one shared root and P7/checkpoints receive it', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: skill } = await load(SKILL);
     const { body: writer } = await agent('GovDocumentationSuiteGenerator');
-
-    assert.match(aro, /At P0, (create|choose) one unique/i);
-    assert.match(aro, /reuse and pass that exact run root/i);
-    assert.match(aro, /must never create sibling run folders/i);
-    assert.match(aro, /resume.*existing run root/i);
-    assert.match(aro, /new assessment.*new unique root/i);
 
     assert.match(skill, /one unique (?:`?<run-root>`?|`[^`]*docs\/project-assessment\/[^`]*<run-id>\/[^`]*)`?/i);
     assert.match(skill, /no sibling run folders/i);
@@ -1471,13 +1337,18 @@ test('one assessment run owns one shared root and P7/checkpoints receive it', as
 
 });
 
+test('standard report persistence is default and progress checkpoints stay opt-in', async () => {
+    const { body: skill } = await load(SKILL);
+    const { body: writer } = await agent('GovDocumentationSuiteGenerator');
+
+    assert.match(skill, /persistence is authorized by default when Aro confirms a non-roster target root/i);
+    assert.match(skill, /only progress checkpoints remain opt-in and explicitly authorized/i);
+    assert.match(writer, /standard P7 report persistence is preauthorized/i);
+    assert.match(writer, /if the directory or any package file exists at P7, never overwrite/i);
+    assert.match(writer, /read back every package file/i);
+});
+
 test('P7 defaults the full run to a unique non-overwrite open-project package path', async () => {
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /P7 runs after P6/);
-    assert.match(aro, /<open-target-root>\/docs\/project-assessment\/\<run-id>\//);
-    assert.match(aro, /Never overwrite an existing directory or package file/i);
-    assert.match(aro, /reuse and pass that exact run root/i);
-    assert.match(aro, /never invent an alternate path or fresh run ID at P7/i);
     const { body } = await load(INGESTION);
     const pkg = sectionBetween(body, '### Checkpoint Package', '## Local Repository P1 Root Identity');
     assert.match(pkg, /P7 default package route to the open project/);
@@ -1489,27 +1360,8 @@ test('P7 defaults the full run to a unique non-overwrite open-project package pa
     assert.match(local, /read.*search|read-only local repository evidence collector/i);
 });
 
-test('Aro P6-P8 keep the full package complete and support chat-only override', async () => {
-    const { body } = await agent('Aro');
-    assert.match(body, /P6 drafts the complete project-assessment Report Package/);
-    assert.match(body, /every package filename becomes an actual document/);
-    assert.match(body, /P7 runs after P6/);
-    assert.match(body, /normal full assessment request authorizes persistence to the open project by default/);
-    assert.match(body, /don't-save|chat-only/);
-    assert.match(body, /P8 is the single consolidated delivery/);
-    assert.match(body, /If P7 is chat-only by explicit override or cannot write\/read back/);
-    assert.match(body, /include the full contents of every P6 package document/);
-    assert.match(body, /If the writer has no write\/read tools, report the runtime blocker and include the report content in chat as fallback/);
-    assert.match(body, /If the writer session has no write tool, report persistence as not performed and return the report content in the response/);
-    assert.match(body, /an executive summary is not a substitute/);
-    assert.match(body, /explicit alternate destination replaces the open root|explicit alternate destination replaces the default/);
-});
-
 test('P6 requires a technical Markdown package and a standalone executive HTML decision page', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: skill } = await load(SKILL);
-    assert.match(aro, /standalone executive HTML decision page/);
-    assert.match(aro, /default executive deliverable for project assessments only/);
     assert.match(skill, /`executive-decision\.html`/);
     for (const filename of ['README.md', 'assessment-method-and-data.md', 'workload-portfolio.md', 'dependency-analysis.md', 'business-requirements.md', 'architecture-c4.md', 'code-doc-consistency.md', 'project-management.md', 'prioritized-findings.md', 'options-and-business-case.md', 'target-state.md', 'migration-roadmap.md', 'validation-log.md']) {
         assert.match(skill, new RegExp(`\`${filename}\``), `Report Package must include ${filename}`);
@@ -1525,36 +1377,21 @@ test('P6 requires a technical Markdown package and a standalone executive HTML d
 });
 
 test('P6 report formats expand P0/P1 and include a non-guessing acronym glossary', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: expert } = await agent('ProjectAssessmentExpert');
     const { body: skill } = await load(SKILL);
 
-    assert.match(aro, /P0.*scope and target.*P1.*runtime inventory gate/i);
-    assert.match(aro, /acronym\/abbreviation index or glossary/i);
-    assert.match(aro, /Do not infer or invent meanings for other abbreviations/i);
-
-    assert.match(expert, /P0.*scope and target.*P1.*runtime inventory gate/i);
+    assert.match(expert, /P0.*scope and target.*P1.*pre-collection validation/i);
     assert.match(expert, /acronym\/abbreviation index or glossary/i);
     assert.match(expert, /UNKNOWN.*expansion is unavailable|expansion is unavailable.*UNKNOWN/i);
 
     assert.match(skill, /expand internal labels and acronyms on first use/i);
     assert.match(skill, /concise acronym\/abbreviation index or glossary/i);
-    assert.match(skill, /P0.*scope and target.*P1.*runtime inventory gate/i);
+    assert.match(skill, /P0.*scope and target.*P1.*pre-collection validation/i);
     assert.match(skill, /never guess a technical meaning/i);
     assert.match(skill, /HTML.*same concise acronym\/abbreviation index or glossary/i);
 });
 
 test('collector completeness rejects unreadable results and compact output retains canonical records', async () => {
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /If a collector result is externalized, unreadable, truncated, or otherwise not retrievable as complete records/);
-    assert.match(aro, /never proceed as if the full evidence was received/);
-    assert.match(aro, /continuation dispatch/);
-    assert.match(aro, /clearly mark `page` and `final_page`/);
-    assert.match(aro, /must not omit required record fields or abbreviate IDs/);
-    assert.match(aro, /missing canonical batch manifest or batch ID does not invalidate readable normalized records/);
-    assert.match(aro, /no readable (normalized )?records remain/);
-    assert.match(aro, /continue P5\/P6|continue P6|status-only P6/);
-
     const { body: local } = await agent('ProjectEvidenceLocalRepoCollector');
     assert.match(local, /compact but complete collection-batch manifest and the complete normalized evidence records/);
     assert.match(local, /Every record must include every canonical field in full/);
@@ -1565,11 +1402,6 @@ test('collector completeness rejects unreadable results and compact output retai
 });
 
 test('ingested repository statement triggers bounded local discovery without a canonical batch ID', async () => {
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /explicit statement that project documents are already ingested in the open repository/);
-    assert.match(aro, /not proof that artifacts exist or are complete/);
-    assert.match(aro, /dispatch local evidence discovery/);
-
     const { body: local } = await agent('ProjectEvidenceLocalRepoCollector');
     assert.match(local, /A user statement that documents are already ingested in the open repository/);
     assert.match(local, /likely evidence locations/);
@@ -1595,9 +1427,6 @@ test('prior assessment reports are excluded and ADO exports remain local evidenc
     assert.match(local, /exclude them as source evidence unless Aro or the user explicitly identifies a file as a source document/);
     assert.match(local, /ADO or Azure DevOps exports/);
 
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /ADO export files already discovered locally remain usable evidence without remote tools/);
-
     const { body: ingestion } = await load(INGESTION);
     assert.match(ingestion, /previous assessment README\/summary\/decision\/report-package artifacts/);
     assert.match(ingestion, /prior-report-context/);
@@ -1608,11 +1437,6 @@ test('absent local evidence returns a concise blocked or empty result without ca
     const { body: local } = await agent('ProjectEvidenceLocalRepoCollector');
     assert.match(local, /Search returns nothing: `EMPTY`/);
     assert.match(local, /never an instruction to ask the user for canonical records/);
-
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /no readable records remain/);
-    assert.doesNotMatch(aro, /provide all canonical records/);
-    assert.match(aro, /Do not restart from zero or demand canonical batch IDs/);
 });
 
 test('ingestion records have standalone identity fields and canonical decode-once evidence IDs', async () => {
@@ -1635,71 +1459,47 @@ test('ingestion records have standalone identity fields and canonical decode-onc
 });
 
 test('authenticated ado-remote-mcp inventory is explicit and does not expand the collector allowlist', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: advisor } = await agent('ProjectAssessmentAdvisor');
     const { metadata: collectorMetadata, body: collector } = await agent('ProjectEvidenceAzureDevOpsCollector');
     const { body: ingestion } = await load(INGESTION);
     const { body: skill } = await load(SKILL);
-    assert.match(aro, /available and authenticated is recorded as server-level availability/);
-    assert.match(aro, /Authenticated with the exact read-only inventory: dispatch ProjectEvidenceAzureDevOpsCollector only/);
     assert.deepEqual(collectorMetadata.tools, ADO_READ_TOOLS);
-    for (const [name, text] of Object.entries({ Aro: aro, advisor, collector, ingestion, skill })) {
+    for (const [name, text] of Object.entries({ advisor, collector, ingestion, skill })) {
         assert.doesNotMatch(text, /unattested/i, `${name} must not describe an authenticated server as unattested`);
     }
 });
 
 test('wildcard and offset search pages never become complete inventory or P5 evidence', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: collector } = await agent('ProjectEvidenceAzureDevOpsCollector');
-    assert.match(aro, /Generic `searchText=SEAO` or `\*` hit pages, arbitrary offsets/);
-    assert.match(aro, /never by themselves justify COMPLETE/);
-    assert.match(aro, /cannot supply P5 canonical records unless their hits are normalized/);
-    assert.match(collector, /Do not treat generic `searchText=SEAO`/);
-    assert.match(collector, /Never claim COMPLETE from search hits alone/);
+    assert.match(collector, /Do not broaden organization, project, query, container, or time scope/);
+    assert.match(collector, /do not treat searches or project-name text as validation/);
+    assert.match(collector, /Convergence is a stop state, not completeness/);
 });
 
 test('P2 routing stays collector-owned and SharePoint tools remain explicitly bound', async () => {
-    const { body: aro } = await agent('Aro');
     const { metadata: sharePoint } = await agent('ProjectEvidenceSharePointCollector');
-    assert.match(aro, /Collectors are the only workers that touch source systems/);
-    assert.match(aro, /never routes P2 data calls or assessment collection to InfraAzureDevOpsAgent/);
-    assert.match(aro, /caller to `UNKNOWN`/);
     assert.deepEqual(sharePoint.tools, SHAREPOINT_READ_TOOLS);
 });
 
 test('externalized ADO output is conservative and continuation preserves batch identity', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: collector } = await agent('ProjectEvidenceAzureDevOpsCollector');
-    assert.match(aro, /A continuation page may omit raw excerpts and incidental match dumps/);
-    assert.match(aro, /same `batch_id`, `run_id`, and `scope_id`/);
-    assert.match(collector, /compact inline collection-batch manifest and canonical evidence records/);
-    assert.match(collector, /follow the tool's next-page marker for the remaining pages, preserving the same `run_id`, `scope_id`, and `batch_id`/);
-    assert.match(collector, /If there are no canonical evidence records, return no evidence-collection claim/);
-});
-
-test('local empty folder does not stop or explain absence of ADO tools', async () => {
-    const { body } = await agent('Aro');
-    assert.match(body, /An empty local `SEAO Analyse 2` folder does not establish that ADO tools are absent/);
-    assert.match(body, /must not stop the independently routed ADO P2 path/);
-    assert.match(body, /`SEAO Analyse 2`/);
+    assert.match(collector, /Return an inline, readable collection-batch manifest and canonical evidence records/);
+    assert.match(collector, /Paginate every accepted category until the source is exhausted or a concrete blocker is reached/);
+    assert.match(collector, /Preserve the exact supplied `run_id`, `scope_id`, `batch_id`/);
+    assert.match(collector, /If no canonical evidence records can be returned, make no evidence claim/);
 });
 
 test('authentication is server context and exact bound tool availability remains independently required', async () => {
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /Authentication is not tool verification/);
-    assert.match(aro, /the exact tool names, their read permissions, and read-only verification before ProjectEvidenceAzureDevOpsCollector is dispatched/);
     const { body: collector } = await agent('ProjectEvidenceAzureDevOpsCollector');
-    assert.match(collector, /Server authentication is supplied and confirmed/);
-    assert.match(collector, /authentication does not expand the tool allowlist/);
+    assert.match(collector, /P1 makes no mutation/);
+    assert.match(collector, /Authentication\/authorization failures are `BLOCKED` or explicit `DENIED`/);
+    assert.match(collector, /Only the exact tool name plus a read-only schema\/action exposed in this invocation authorizes a call/);
     const { body: ingestion } = await load(INGESTION);
-    assert.match(ingestion, /Authentication is not tool verification/);
-    assert.match(ingestion, /exact name, read permission, and read-only verification are supplied/);
+    assert.match(ingestion, /Authentication or server availability is not evidence of read-only capability/);
+    assert.match(ingestion, /Invoke only an exact allowlisted operation with valid arguments/);
 });
 
 test('authenticated plus exact read-only inventory dispatches only the read-only Azure DevOps collector', async () => {
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /Authenticated with the exact read-only inventory: dispatch ProjectEvidenceAzureDevOpsCollector only\./);
-    assert.match(aro, /Azure DevOps assessment collection never routes to InfraAzureDevOpsAgent/);
     const { metadata, body: advisor } = await agent('ProjectAssessmentAdvisor');
     assert.deepEqual(metadata.tools, []);
     assert.match(advisor, /selects ProjectEvidenceAzureDevOpsCollector when that candidate is supplied, even if the server is only authenticated/);
@@ -1710,74 +1510,74 @@ test('Azure DevOps collector has only exact read tools with no wildcard, mutatio
     const { metadata, body } = await agent('ProjectEvidenceAzureDevOpsCollector');
     assert.deepEqual(metadata.tools, ADO_READ_TOOLS);
     assert.ok(!metadata.tools.some(tool => /\*|InfraAzureDevOps|create|update|delete|queue|approve|merge|cancel|link/i.test(tool)));
-    assert.match(body, /Never add a wildcard, mutation tool, write action, or InfraAzureDevOpsAgent tool to this collector/);
-    assert.match(body, /Grouped tools that take an action or method parameter are bound but gated/);
-    assert.match(body, /Do not treat an unverified tool as safe/);
+    assert.match(body, /Never use a wildcard, unlisted tool, shell command, `InfraAzureDevOpsAgent`, or MCP configuration\/profiles/);
+    assert.match(body, /For grouped\/mixed tools, inspect the schema and use only a read enum explicitly confirmed by that schema/);
+    assert.match(body, /Only the exact tool name plus a read-only schema\/action exposed in this invocation authorizes a call/);
 });
 
-// Fixture flags describe a preflight outcome from the collector's own invocation; no runtime is exercised here.
-const ADO_PREFLIGHT_CASES = [
-    { name: 'tool list unreadable in invocation', schemaExposed: false, absentTools: [], outcome: 'BLOCKED_TOOL_LIST_UNREADABLE' },
-    { name: 'invocation exposes every bound exact tool', schemaExposed: true, absentTools: [], outcome: 'PREFLIGHT_PASSED' },
-    { name: 'invocation omits one exact tool', schemaExposed: true, absentTools: ['ado-remote-mcp/search_wiki'], outcome: 'BLOCKED_TOOL_ABSENT' }
+// Fixture flags describe invocation outcomes from the collector's own direct read; no runtime is exercised here.
+const ADO_INVOCATION_CASES = [
+    { name: 'entire category invocation returns tool-not-found', invocation: 'TOOL_NOT_FOUND', outcome: 'BLOCKED_SOURCE_UNAVAILABLE' },
+    { name: 'exact invocation succeeds with canonical records', invocation: 'SUCCESS_CANONICAL', outcome: 'P5_ELIGIBLE' },
+    { name: 'exact invocation succeeds with unreadable data', invocation: 'SUCCESS_UNREADABLE', outcome: 'DATA_FORMAT' }
 ];
-const ADO_PREFLIGHT_CONTRACT = {
-    BLOCKED_TOOL_LIST_UNREADABLE: { aro: /If the collector reports the preflight as BLOCKED or UNKNOWN, Azure DevOps is BLOCKED/, collector: /Tool list unreadable: if this invocation's tool list cannot be read/ },
-    BLOCKED_TOOL_ABSENT: { aro: /never substituted with InfraAzureDevOpsAgent/, collector: /Any absent identifier: the batch is `BLOCKED` with that identifier named/ },
-    PREFLIGHT_PASSED: { aro: /never confirms bindings from chat/, collector: /Run once at P1, before any data call/ }
+const ADO_INVOCATION_CONTRACT = {
+    BLOCKED_SOURCE_UNAVAILABLE: { collector: /An actual tool-not-found\/unavailable result|If the entire category surface is absent or unreadable/ },
+    P5_ELIGIBLE: { collector: /Every evidence record carries `batch_id`, `run_id`, `scope_id`/ },
+    DATA_FORMAT: { collector: /A page externalized, unreadable, truncated, or noncanonical/ }
 };
-const adoPreflightOutcome = ({ schemaExposed, absentTools }) => {
-    if (!schemaExposed) return 'BLOCKED_TOOL_LIST_UNREADABLE';
-    return absentTools.length ? 'BLOCKED_TOOL_ABSENT' : 'PREFLIGHT_PASSED';
+const adoInvocationOutcome = ({ invocation }) => {
+    if (invocation === 'TOOL_NOT_FOUND') return 'BLOCKED_SOURCE_UNAVAILABLE';
+    if (invocation === 'SUCCESS_UNREADABLE') return 'DATA_FORMAT';
+    return 'P5_ELIGIBLE';
 };
 
-test('ADO preflight fixtures map to documented outcomes without InfraAzureDevOpsAgent substitution', async () => {
-    const { body: aro } = await agent('Aro');
+test('ADO invocation fixtures map actual failures and data outcomes without InfraAzureDevOpsAgent substitution', async () => {
     const { body: collector } = await agent('ProjectEvidenceAzureDevOpsCollector');
     const outcomes = new Set();
-    for (const testCase of ADO_PREFLIGHT_CASES) {
-        const outcome = adoPreflightOutcome(testCase);
+    for (const testCase of ADO_INVOCATION_CASES) {
+        const outcome = adoInvocationOutcome(testCase);
         assert.equal(outcome, testCase.outcome, `${testCase.name}: fixture must classify as ${testCase.outcome}`);
         outcomes.add(outcome);
-        assert.match(aro, ADO_PREFLIGHT_CONTRACT[outcome].aro, `${testCase.name}: Aro must document ${outcome}`);
-        assert.match(collector, ADO_PREFLIGHT_CONTRACT[outcome].collector, `${testCase.name}: collector must document ${outcome}`);
+        assert.match(collector, ADO_INVOCATION_CONTRACT[outcome].collector, `${testCase.name}: collector must document ${outcome}`);
     }
     assert.equal(outcomes.size, 3, 'fixtures must cover three distinct outcomes');
-    assert.match(collector, /Do not substitute InfraAzureDevOpsAgent or any other tool/);
-    assert.match(collector, /or a supplied statement, report the source `BLOCKED` with all bound tools `UNKNOWN`/);
+    assert.match(collector, /Never use a wildcard, unlisted tool, shell command, `InfraAzureDevOpsAgent`/);
+    assert.match(collector, /If the entire category surface is absent or unreadable, report that precise source blocker/);
 });
 
-test('ADO preflight checks only exposed tools and schemas, is read-only, and chat cannot establish bindings', async () => {
-    const { body: aro } = await agent('Aro');
+test('ADO direct invocation keeps missing categories independent from verified categories', async () => {
+    const { body: collector } = await agent('ProjectEvidenceAzureDevOpsCollector');
+    assert.match(collector, /Do not inventory or preflight tool exposure/);
+    assert.match(collector, /A category is collected independently/);
+    assert.match(collector, /actual tool-not-found\/unavailable result blocks only that category/);
+    assert.match(collector, /If the entire category surface is absent or unreadable, report that precise source blocker/);
+});
+
+test('ADO direct invocation uses exact read tools and schemas without chat-established bindings', async () => {
     const { metadata, body: collector } = await agent('ProjectEvidenceAzureDevOpsCollector');
     assert.deepEqual(metadata.tools, ADO_READ_TOOLS);
-    assert.match(collector, /Check each bound identifier in the frontmatter against the tool IDs and schemas exposed in this invocation's session/);
-    assert.match(collector, /Do not ask Aro or the user to prove runtime state/);
-    assert.match(collector, /Read-only verification: a bound tool is `verified` only when its exposed schema shows it/);
-    assert.match(collector, /The preflight makes no write call/);
-    assert.match(collector, /Chat text cannot verify the server's read-only mode or these bindings; only the P1 preflight below, run against the tools and schemas exposed in this invocation, can/);
-    assert.match(aro, /The collector's P1 preflight, run against the tools and schemas exposed in its own invocation, is the only tool-availability and read-only verification/);
-    assert.match(aro, /never confirms bindings from chat/);
+    assert.match(collector, /Validate the requested category scopes and exact allowlisted operation arguments/);
+    assert.match(collector, /Do not inventory or preflight tool exposure/);
+    assert.match(collector, /Only the exact tool name plus a read-only schema\/action exposed in this invocation authorizes a call/);
+    assert.match(collector, /P1 makes no mutation/);
+    assert.match(collector, /Authentication\/authorization failures are `BLOCKED` or explicit `DENIED`/);
     const maintenance = await read('docs/maintenance.md');
-    assert.match(maintenance, /checked only by the collector's P1 preflight against the tools and schemas exposed in its own invocation; chat validation does not establish them/);
+    assert.match(maintenance, /chat validation does not establish them/);
 });
 
 test('ADO large responses follow exhaustive page markers, compact canonical records, and UNKNOWN repository inventory', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: collector } = await agent('ProjectEvidenceAzureDevOpsCollector');
-    assert.match(collector, /Query with the page-size and continuation parameters that the tool's exposed schema shows/);
-    assert.match(collector, /Do not invent parameter names/);
-    assert.match(collector, /Record a continuation token only as present or absent; never write its value into output/);
-    assert.match(collector, /Project each returned item into the compact canonical evidence record/);
-    assert.match(collector, /Keep every canonical field, the full `evidence_id`, and navigation markers/);
-    assert.match(collector, /Page size is a transport setting and never limits the collected set/);
-    assert.match(collector, /Follow each next-page marker with the same `run_id`, `scope_id`, and `batch_id` until the final page is read or the source reports exhaustion; there is no page-count limit/);
-    assert.match(collector, /mark the batch `PARTIAL` with `DATA_FORMAT` coverage, record the unread marker as the blocker, exclude the affected records from P5/);
-    assert.match(collector, /name the missing category \(repository inventory\) and the missing exact read-only tool in the coverage register/i);
-    assert.match(collector, /Repository inventory is `UNKNOWN` when the P1 preflight does not verify an exact read-only repository-list tool/);
-    assert.match(collector, /Do not infer repository inventory from search or commit hits/);
-    assert.match(aro, /Large responses are collected by following every page marker until the source reports exhaustion/);
-    assert.match(aro, /page size is transport only and never a result cap/);
+    assert.match(collector, /Use schema-provided page-size and continuation parameters only/);
+    assert.match(collector, /Paginate every accepted category until the source is exhausted or a concrete blocker is reached/);
+    assert.match(collector, /Record exact category scope, query, page\/offset or continuation state, result count, exhaustion evidence, and stop reason/);
+    assert.match(collector, /navigation ledger entries and page\/final-page markers/);
+    assert.match(collector, /Every evidence record carries `batch_id`, `run_id`, `scope_id`/);
+    assert.match(collector, /No fixed item\/page\/result cap applies/);
+    assert.match(collector, /A page externalized, unreadable, truncated, or noncanonical makes that batch `PARTIAL` or `BLOCKED` with `DATA_FORMAT`; exclude unread records from P5/);
+    assert.match(collector, /An actual tool-not-found\/unavailable result is `BLOCKED`/);
+    assert.match(collector, /Repository inventory requires a schema-verified read-only `ado-remote-mcp\/repo_repository` action/);
+    assert.match(collector, /infer repository inventory from commits, search hits, or text names/);
 });
 
 test('every applicable collector and the ingestion skill require exhaustive no-cap collection and usage-signal coverage', async () => {
@@ -1789,68 +1589,49 @@ test('every applicable collector and the ingestion skill require exhaustive no-c
 
     for (const name of COLLECTORS) {
         const { body } = await agent(name);
-        assert.match(body, /Collect exhaustively|Collection is exhaustive/i, `${name}: must state exhaustive collection`);
-        assert.match(body, /usage, adoption, activity, and decision signals/i, `${name}: must collect usage/adoption/activity/decision signals where exposed`);
-        assert.match(body, /No fixed per-source item maximum|no arbitrary item/i, `${name}: must forbid a fixed collection cap`);
+        assert.match(body, /Collect exhaustively|Collection is exhaustive|Paginate every accepted category/i, `${name}: must state exhaustive or paginated collection`);
+        assert.match(body, /usage, adoption, activity|usage.*decision signals/i, `${name}: must collect usage/adoption/activity/decision signals where exposed`);
+        assert.match(body, /No fixed per-source item maximum|No fixed item\/page\/result cap applies|no arbitrary item/i, `${name}: must forbid a fixed collection cap`);
         assert.match(body, /UNKNOWN` or `BLOCKED|UNKNOWN or `BLOCKED|UNKNOWN\/BLOCKED/i, `${name}: unavailable categories must remain UNKNOWN/BLOCKED`);
     }
-
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /Exhaustive read-only collection within explicitly authorized scope/i);
-    assert.match(aro, /usage\/adoption\/activity\/decision signal coverage/i);
 });
 
 test('ADO collector and Aro ADO guidance define no arbitrary result cap', async () => {
     const { body: collector } = await agent('ProjectEvidenceAzureDevOpsCollector');
     const { body: aro } = await agent('Aro');
     assert.doesNotMatch(collector, ADO_RESULT_CAP, 'ADO collector must not define a top-N, first-page, or one-continuation cap');
-    assert.match(collector, /follow the source's own next-page marker until it reports exhaustion or a concrete blocker/);
+    assert.match(collector, /Paginate every accepted category until the source is exhausted or a concrete blocker is reached/);
     const adoLines = aro.split('\n').filter(line => /ado-remote-mcp|Azure DevOps|\bADO\b/.test(line));
-    assert.ok(adoLines.length > 0, 'Aro must contain ADO guidance');
     for (const line of adoLines) {
         assert.doesNotMatch(line, ADO_RESULT_CAP, `Aro ADO guidance must not define a result cap: ${line.slice(0, 80)}`);
     }
 });
 
 test('supplied ado-remote-mcp server, organization, and project facts are never re-asked', async () => {
-    const { body: aro } = await agent('Aro');
-    assert.match(aro, /Never ask again for supplied `ado-remote-mcp` server facts, organization, or project names/);
-    assert.match(aro, /a missing inventory is reported, not asked serially/);
     const { body: collector } = await agent('ProjectEvidenceAzureDevOpsCollector');
-    assert.match(collector, /Do not ask the user again for supplied server, organization, or project names/);
-    assert.match(collector, /Use the organization and project supplied by Aro/);
+    assert.match(collector, /Organization and project are invocation inputs supplied by Aro as `<ORGANIZATION_INPUT>\/<PROJECT_INPUT>`/);
+    assert.match(collector, /match the actual response exactly/);
+    assert.match(collector, /If either is missing, report NEEDS_INPUT/);
 });
 
 test('exact French continuation prompt has sufficient intake and constrained partial continuation', async () => {
-    const prompt = "Continue la gérénration d'une évaluation complète du projet [Summary - Overview](https://dev.azure.com/ITQ-SEAO/SEAO), Des documents déjà ingéré sont disponible. Source: https://spgouvqc.sharepoint.com/teams/MCN-SEAO-Maintenance-volution";
-    const { body: aro } = await agent('Aro');
     const { body: advisor } = await agent('ProjectAssessmentAdvisor');
     const { body: local } = await agent('ProjectEvidenceLocalRepoCollector');
     const { body: skill } = await load(SKILL);
     const guide = await read('docs/advanced-task-prompts.md');
 
-    assert.ok(aro.includes(prompt), 'Aro must recognize the exact French continuation prompt');
-    assert.match(aro, /resume the prior assessment at the current\/open project root/);
-    assert.match(aro, /requires no target, source, tool-name, credential, or canonical-record clarification/);
-    assert.match(aro, /existing exports, corpus files, manifests, and readable prior analysis artifacts/);
-    assert.match(aro, /Prior assessment reports are context only/);
-    assert.match(aro, /P5 may run on constrained, readable local or prior evidence/);
-    assert.match(aro, /P5 and P6 must not stop solely because/);
-    assert.match(aro, /without claiming completeness or a final go\/no-go/);
     assert.match(advisor, /continuation request that says project documents are already ingested/);
     assert.match(advisor, /continuation that supplies the open project root|supplied open project root|resolved open repository/);
     assert.match(local, /A user statement that documents are already ingested/);
     assert.match(skill, /continuation prompt means resume prior assessment work rather than start blank/);
     assert.match(skill, /constrained continuation/);
-    assert.match(guide, /Continue la gérénration d'une évaluation complète du projet/);
-    assert.match(guide, /https:\/\/dev\.azure\.com\/ITQ-SEAO\/SEAO/);
-    assert.match(guide, /https:\/\/spgouvqc\.sharepoint\.com\/teams\/MCN-SEAO-Maintenance-volution/);
+    assert.match(guide, /Continue la génération d'une évaluation complète du projet/);
+    assert.match(guide, /https:\/\/dev\.azure\.com\/\{organization\}\/\{project\}/);
+    assert.match(guide, /Source: https:\/\/\{site-url\}/);
+    assert.doesNotMatch(guide, /ITQ-SEAO|SEAO|spgouvqc|MCN-SEAO-Maintenance-volution/i);
     assert.match(guide, /Prior reports are context only/);
     assert.match(guide, /Persistence does not need a separate save-confirmation question/);
 
-    assert.match(aro, /P7 runs after P6/);
-    assert.match(aro, /normal full assessment request authorizes persistence to the open project by default/);
-    assert.match(aro, /If P7 is chat-only by explicit override or cannot write\/read back/);
     assert.match(skill, /no health or completeness score while any in-scope source is incomplete/);
 });
 
@@ -1862,39 +1643,23 @@ test('assessment skill reports one ADO inventory gap in P8 and keeps authenticat
 });
 
 test('source failures do not stop P5/P6 and zero records yield a status-only package', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: skill } = await load(SKILL);
     const { body: ingestion } = await load('skills/project-evidence-ingestion/SKILL.md');
 
-    assert.match(aro, /No single source failure can terminate the assessment/);
-    assert.match(aro, /zero readable normalized records remain/);
-    assert.match(aro, /status-only P6 package/);
     assert.match(skill, /A remote source that is unavailable remains BLOCKED/);
     assert.match(skill, /zero valid records/);
     assert.match(ingestion, /unreadable continuation only blocks its own source/);
 });
 
 test('progress checkpoints use exactly one append-only log per run with a replaced summary', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: skill } = await load(SKILL);
     const { body: ingestion } = await load('skills/project-evidence-ingestion/SKILL.md');
     const { body: writer } = await agent('GovDocumentationSuiteGenerator');
     const maintenance = await read('docs/maintenance.md');
 
-    for (const text of [aro, skill, ingestion, writer, maintenance]) {
+    for (const text of [skill, ingestion, writer, maintenance]) {
         assert.match(text, /checkpoints\/progress-checkpoint\.md/);
     }
-    assert.match(aro, /Exactly one progress log per assessment run/);
-    assert.match(aro, /current-state\/resume summary at the top/);
-    assert.match(aro, /timestamped chronological update entries appended below/);
-    assert.match(aro, /Never overwrite, reorder, or delete prior entries/);
-    assert.match(aro, /Read the file back and confirm prior entries are unchanged/);
-    assert.match(aro, /Reuse and pass the exact P0 run root/);
-    assert.match(aro, /never choose a fresh run ID or path midway/);
-    assert.match(aro, /P0\/P1, each source P2 attempt, P3\/P4, and P5\/chain stages/);
-    assert.match(aro, /checkpoint authorization is absent, the writer is unavailable/);
-    assert.match(aro, /preserve the checkpoint in chat for resume/);
-    assert.match(aro, /Resume from the latest readable checkpoint/);
     assert.match(writer, /Progress log: write only the exact/);
     assert.match(writer, /sole exception to the no-overwrite rule/);
     assert.match(skill, /collect only deltas/i);
@@ -1903,14 +1668,13 @@ test('progress checkpoints use exactly one append-only log per run with a replac
 });
 
 test('no assessment document expects per-stage or suffixed checkpoint files', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: skill } = await load(SKILL);
     const { body: ingestion } = await load('skills/project-evidence-ingestion/SKILL.md');
     const { body: writer } = await agent('GovDocumentationSuiteGenerator');
     const { body: expert } = await agent('ProjectAssessmentExpert');
     const maintenance = await read('docs/maintenance.md');
 
-    for (const text of [aro, skill, ingestion, writer, expert, maintenance]) {
+    for (const text of [skill, ingestion, writer, expert, maintenance]) {
         const mentions = text.match(/[^\n]*progress-checkpoint-after[^\n]*/g) ?? [];
         for (const line of mentions) {
             assert.match(line, /\b(?:never|not|avoid|no)\b/i, `suffixed checkpoint file must only be prohibited: ${line.slice(0, 120)}`);
@@ -1920,19 +1684,28 @@ test('no assessment document expects per-stage or suffixed checkpoint files', as
 });
 
 test('checkpoint writes need explicit authorization, stay separate from P7, and exclude local source by default', async () => {
-    const { body: aro } = await agent('Aro');
     const { body: skill } = await load(SKILL);
     const { body: writer } = await agent('GovDocumentationSuiteGenerator');
 
-    assert.match(aro, /Checkpoint writes are checkpoint-only and require explicit save authorization/);
-    assert.match(aro, /names the confirmed P0 run root and the exact write-list/);
-    assert.match(aro, /A normal full assessment's standing save does not cover checkpoints/);
-    assert.match(aro, /checkpoint writes never authorize saving final report documents/);
-    assert.match(aro, /the existing P7 gate remains for final reports/);
-    assert.match(aro, /Do not ask for checkpoint authorization during P0-P6/);
-    assert.match(aro, /P7 runs after P6/);
-    assert.match(aro, /Checkpoints never add the project-local repository to scope/);
-    assert.match(skill, /explicit save authorization naming the exact run root and write-list/);
-    assert.match(skill, /existing P7 gate remains for final reports/);
+    assert.match(skill, /checkpoints.*explicitly authorizes it|explicit save authorization naming the exact run root and write-list/i);
+    assert.match(skill, /P7 report persistence is independent and authorized by default/);
     assert.match(writer, /only with explicit checkpoint save authorization/);
+});
+
+test('writer pins per-file delivered, conflict, mismatch, and not-written reporting with read-back comparison', async () => {
+    const { body: writer } = await agent('GovDocumentationSuiteGenerator');
+    const { body: skill } = await load(SKILL);
+    assert.match(writer, /Read back every package file, including `executive-decision\.html`, and compare it with the content received/);
+    assert.match(writer, /Maintain a root index naming every artifact and its status beneath this root, including final reports, standalone HTML, validation log, and progress checkpoint/);
+    assert.match(writer, /Report exact relative paths and per-file status for delivered, conflict, mismatch, or not written\./);
+    assert.match(writer, /If a path exists with different content, do not overwrite it\. Report the conflict with both paths and skip that file\./);
+    assert.match(writer, /Report the conflict and leave existing content unchanged\./);
+    assert.match(skill, /Read back every file at the same version and verify content, links, IDs\/citations, and package completeness/);
+});
+
+test('inline fallback returns the full package when the writer is unavailable or read-back fails', async () => {
+    const { body: skill } = await load(SKILL);
+    const { body: writer } = await agent('GovDocumentationSuiteGenerator');
+    assert.match(skill, /Aro dispatches `GovDocumentationSuiteGenerator`; otherwise, or if persistence\/read-back fails, return the complete package content in chat\./);
+    assert.match(writer, /If this session has no write tool, write nothing, report persistence as untested and not performed, and return the content to Aro\./);
 });

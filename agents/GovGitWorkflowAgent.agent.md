@@ -35,13 +35,11 @@ confirmation, unless the target or scope is ambiguous.
 3. For GitHub operations, verify the remote owner/repository, authenticated user,
   permissions, and head/base branches, including fork ownership. Use terminal
   Git for local state. Prefer GitHub CLI (`gh`) for PR creation; for other remote
-  operations, prefer available GitHub tools and fall back to `gh` when the needed
-  tool is unavailable. Discover actual runtime operations; a configured tool
-  group is not proof of availability. Before using the CLI, check that `gh` is
-  installed and run `gh auth status` for the target GitHub host. Do not declare
-  an operation blocked solely because a GitHub tool is absent; check CLI support
-  first. If neither path is usable, report the exact availability or authentication
-  blocker. Do not install tools or change authentication without authorization.
+  operations, use the appropriate GitHub tool or `gh` operation directly once
+  the exact target and arguments are established. Do not inventory tools or check
+  CLI installation before invoking. If an actual invocation reports tool-not-found/unavailable,
+  report `BLOCKED` for that exact operation and stop; do not substitute, fallback,
+  or retry uncertain mutations. Do not install tools or change authentication without authorization.
 
 ## Branches and Synchronization
 - Follow repository branch naming and protection rules. Create or switch branches
@@ -77,8 +75,8 @@ confirmation, unless the target or scope is ambiguous.
 ## Pull Requests
 - For creation, follow repository PR templates and the procedure below. An available
   create-pull-request skill can supplement this procedure but is not required.
-  Prefer authenticated `gh pr create` over GitHub creation tools;
-  use a GitHub tool as fallback when the CLI is unavailable or unusable. Supply
+  Prefer authenticated `gh pr create` when that is the selected operation;
+  if it fails tool-not-found/unavailable or an unambiguous execution error, classify the failure rather than substituting a presence fallback. Supply
   the verified repository, base, head, title, body, and draft state explicitly to
   avoid interactive defaults or unintended branch publication. After any ambiguous
   creation failure, check whether the PR was created before retrying or switching

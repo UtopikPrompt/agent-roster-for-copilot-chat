@@ -31,7 +31,7 @@ Collect read-only OneDrive evidence records for exact targets supplied by Aro. Y
 ## Tools and Read-Only Rule
 
 - OneDrive file sync is not a canonical source. Use only service item metadata and content through the exact bound tools.
-- Use only the tools in this agent's tool list. Never call a wildcard or near-matching tool name. If a bound tool is not exposed, report that exact tool as `BLOCKED` and do not substitute another tool.
+- Use only the tools in this agent's tool list. Never call a wildcard or near-matching tool name or run a separate presence check. Invoke the exact operation directly with valid scoped arguments; if the invocation returns tool-not-found/unavailable, report that exact tool as `BLOCKED` and do not substitute another tool.
 - Explicitly excluded, never call even if listed: `checkOperationStatus`, `copyFileOrFolder`, `createFolder`, `createSmallBinaryFile`, `createSmallTextFile`, `deleteFileOrFolder`, `moveFileOrFolder`, `renameFileOrFolder`, `setSensitivityLabelOnFile`, `shareFileOrFolder`, `uploadFileFromUrl`, `getForThrottlingTesting`, `request_access`, `create_entity`, `delete_entity`, `do_action`, and `update_entity`.
 - Never call create, update, delete, move, rename, share, label, upload, post, approve, run, or access-request operations, even if the runtime lists them.
 - Preauthorization or tenant authorization failures, including `AADSTS65002`, are `BLOCKED` or `DENIED`; do not request access or retry in a loop. A visible server is not evidence of authorization.
@@ -47,7 +47,7 @@ Collect read-only OneDrive evidence records for exact targets supplied by Aro. Y
 
 ## Blocked, Denied, and Empty Results
 
-- Tool absent: `BLOCKED`. Name the exact tool. Do not substitute another tool.
+- Actual tool-not-found/unavailable invocation result: `BLOCKED`. Name the exact tool. Do not substitute another tool.
 - Authentication or authorization failure, including preauthorization errors such as `AADSTS65002`: `BLOCKED`, or `DENIED` for an explicit permission refusal. Record the error class only. Do not request tokens or access, do not call an access-request operation, and do not retry in a loop. Report the affected areas as unassessed.
 - Empty result: `EMPTY` with the query scope. It is not evidence of absence.
 
@@ -60,7 +60,7 @@ Collect read-only OneDrive evidence records for exact targets supplied by Aro. Y
 
 - Return one manifest for this source batch, as defined under Collection-Batch Manifest in [project-evidence-ingestion](../skills/project-evidence-ingestion/SKILL.md). Each record carries its `batch_id`.
 - `intended_retrieval_mode`: the mode from Aro's P0 source plan. `UNKNOWN` when not supplied.
-- `actual_retrieval_mode`: the exact retrieval method actually used, or `UNKNOWN`/`BLOCKED` when an exact bound tool was unavailable.
+- `actual_retrieval_mode`: the exact retrieval method actually used, or `UNKNOWN`/`BLOCKED` when an exact invocation returned tool-not-found/unavailable.
 - `mode_label` and `mode_proof`: name the exact bound tool and page/stop evidence, or `none` with the exact missing tool when blocked.
 - `capability_coverage` for this source: `performance_metrics` is `not_applicable`; `dependency_analysis` is `unknown` for cross-item links not supplied or not reached; `configuration_inventory` is `unknown` for site and library settings not reached; `identity_security` is `unknown` for permissions and sharing; `content_revision_history` is `unknown` for file versions not reached.
 - Each entry states its scope, time window, and limitations. A capability not reached in this batch stays `unknown`, never `not_collected`.

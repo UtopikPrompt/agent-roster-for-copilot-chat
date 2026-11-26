@@ -5,7 +5,7 @@
             "name": "Agent Roster: Debug Extension Development Host",
             "type": "extensionHost",
             "request": "launch",
-            "preLaunchTask": "npm: vscode:prepublish",
+            "preLaunchTask": "Agent Roster: Debug prelaunch (tests skipped)",
             "args": [
                 "--extensionDevelopmentPath=${workspaceFolder}"
             ]

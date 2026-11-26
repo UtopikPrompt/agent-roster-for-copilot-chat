@@ -38,6 +38,7 @@
     },
     "scripts": {
         "test": "node --test",
+        "test:skip": "node -e \"console.warn('TESTS SKIPPED FOR DEBUGGING: no tests were run')\"",
         "lint": "node scripts/validate.mjs",
         "vscode:prepublish": "npm test && npm run lint",
         "package": "vsce package"
@@ -314,7 +315,10 @@
                     "properties": {
                         "operation": {
                             "type": "string",
-                            "enum": ["search", "list"]
+                            "enum": [
+                                "search",
+                                "list"
+                            ]
                         },
                         "query": {
                             "type": "string",
@@ -332,7 +336,9 @@
                             "default": 20
                         }
                     },
-                    "required": ["operation"],
+                    "required": [
+                        "operation"
+                    ],
                     "additionalProperties": false
                 }
             },

@@ -62,9 +62,10 @@ Follow the existing repository's modules, environment files and backend layout.
 Generated working directories such as `.terraform/` are not source templates.
 
 ## Dependencies
-Verify the installed Terraform/Pulumi/Bicep or ARM validation toolchain and current
-provider schema before generating code. Use repository examples that compile
-under that toolchain; do not invent package names, syntax or API versions.
+Determine the required Terraform/Pulumi/Bicep or ARM syntax and provider schema
+from the repository and authorized operation, then invoke the real validation or
+generation command with valid arguments. Do not run a separate toolchain-presence
+preflight; actual tool-not-found/unavailable establishes `BLOCKED`. Do not invent package names, syntax or API versions.
 
 ## Output Contract
 ```yaml

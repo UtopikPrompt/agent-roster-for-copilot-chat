@@ -42,16 +42,16 @@ Collect read-only local repository evidence records from the target root. You do
 
 When Aro dispatches this agent with a local preflight, run it first in the same dispatch. Continue to collection only if it passes.
 
-- Confirm that `read` and `search` are available to this session. If either is absent, return `BLOCKED` naming it.
+- Do not preflight `read` or `search`. Invoke the required operation directly once the exact destination and arguments are valid.
 - Establish destination usability, not source-repository identity: confirm the exact folder supplied by Aro is readable and remains the destination root. A valid empty workspace is not evidence-source identity. If the folder is empty or has no recognized source manifest, pass P1 and return to P2. Never require repository identity for an output-only workspace.
 - Recognized source signals may be observed during P2: `package.json`, `README.md`, `*.sln`, `*.slnx`, `*.csproj`, `pom.xml`, `build.gradle`, `build.gradle.kts`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `composer.json`, and clearly bounded solution-like or repository metadata such as `global.json`, `Directory.Build.props`, `Directory.Build.targets`, `.slnx`, `settings.gradle`, `settings.gradle.kts`, `.mvn`, `gradlew`, `Makefile`, `.gitignore`, `.gitattributes`, or `.github`. Record only exact observed fields and repository-relative locators; never invent identity.
 - Keep every preflight read/search root-bounded and non-recursive. Do not list or scan the whole repository, walk parent/child locations, or inspect unrelated paths. If no source artifacts exist, return `EMPTY` or `PARTIAL` from P2, with explicit scope and coverage, and continue only through Aro's downstream P5/P6 process.
-- If the supplied destination is unreadable or the path cannot be read, stop and return `ERROR` with the exact target root and error class. If `read` or `search` is unavailable, return `BLOCKED`. Do not retry with guessed roots or ask for repository identity.
+- If the supplied destination is unreadable or the path cannot be read, stop and return `ERROR` with the exact target root and error class. If an actual invocation returns tool-not-found/unavailable, return `BLOCKED`. Do not retry with guessed roots or ask for repository identity.
 - On failure, stop and return the result. On pass, continue local collection under Navigation, still limited to the target root.
 
 ## Blocked, Denied, and Empty Results
 
-- Tool absent: `BLOCKED`. Name the exact tool. Do not substitute another tool, including a shell command.
+- Actual tool-not-found/unavailable invocation result: `BLOCKED`. Name the exact tool. Do not substitute another tool, including a shell command.
 - Path unreadable: `ERROR` with the repository-relative path and error class.
 - Search returns nothing: `EMPTY` with the query scope. It is not evidence of absence.
 

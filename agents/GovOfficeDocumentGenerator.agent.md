@@ -17,9 +17,10 @@ tools: [ read, search, edit, execute ]
 ## Native Office Export
 1. Confirm requested formats, supplied content, output paths and fidelity needs; clarify
    ambiguous slide structure or conversion expectations.
-2. Preflight local generators for every requested format before writing any file. If a
-   required generator is missing, return BLOCKED with setup needed; do not create
-   substitutes or a partial set unless the user approves it.
+2. Once formats, content, and output paths are valid, invoke the appropriate local
+   generator directly. Do not run a separate generator-presence preflight or dummy
+   generation. If actual invocation fails tool-not-found/unavailable, return `BLOCKED`
+   with the exact missing generator; do not create substitutes or a partial set.
 3. Use an installed `python-pptx` or approved local PowerPoint automation for `.pptx`;
    use installed Visio automation or another verified local VSDX generator for `.vsdx`.
    Never rename formats, download tools, use online converters or install packages

@@ -92,8 +92,7 @@ When this workflow is relevant, read and follow the bundled [container-display-o
 3. Validate only the authorized connection and environment setup; do not install packages or expose ports automatically.
 
 ## Container Lifecycle Management
-Verify the installed dev-container/runtime CLI and its supported commands before
-use. Creating, rebuilding, stopping or deleting containers can run hooks or lose
+Use only the target dev-container/runtime CLI commands actually supported by the repository and invoke a real authorized command. Do not perform a separate CLI-presence preflight; an actual tool-not-found/unavailable result establishes `BLOCKED`. Determine supported commands from the actual repository configuration and preserve exact scope. Creating, rebuilding, stopping or deleting containers can run hooks or lose
 state and requires authorization for the affected operation. Report exact commands
 actually run; never infer a CLI verb merely from a lifecycle label.
 

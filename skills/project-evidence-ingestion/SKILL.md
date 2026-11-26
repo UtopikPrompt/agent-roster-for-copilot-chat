@@ -248,9 +248,9 @@ A progress checkpoint records run/scope, source status, batch ids, accepted reco
 
 ## Failure Handling
 
-- Tool absent from the agent's tool list or runtime: `BLOCKED`. Name the exact tool. Do not substitute another tool, shell command, or direct request.
+- Actual tool-not-found/unavailable invocation result: `BLOCKED`. Name the exact tool. Do not substitute another tool, shell command, direct request, or retry.
 - Authentication or authorization failure, including preauthorization errors such as `AADSTS65002`: `BLOCKED`, or `DENIED` for an explicit permission refusal. Record the error class only. Do not request tokens or access, do not call an access-request operation, and do not retry in a loop.
-- Authentication is not tool verification: an available or authenticated server record does not establish a read-only inventory. A tool is collectable only when its exact name, read permission, and read-only verification are supplied and the collector has it bound. Missing exact tools make the batch `BLOCKED` with one named inventory gap, and other batches continue.
+- Authentication or server availability is not evidence of read-only capability. Invoke only an exact allowlisted operation with valid arguments. An actual tool-not-found/unavailable result makes that batch `BLOCKED` with one named invocation gap, and other batches continue.
 - Connection failure: `ERROR` with the failed operation and error class.
 - Empty result: `EMPTY` with the query scope. It is not evidence of absence.
 - Partial page or interrupted enumeration: `PARTIAL` with the remaining queue.
