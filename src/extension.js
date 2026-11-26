@@ -3,6 +3,8 @@ const { randomBytes } = require('node:crypto');
 const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { loadStore } = require('./prior-assessment-store');
+const evidenceStore = require('./evidence-store');
+const evidenceDashboard = require('./evidence-dashboard');
 const { effectiveModelScope, getInventorySummary, getManagedPricing, hasSelectedLocalModel, isCopilotCloudVendor, isModelSelected, modelKey, modelKind, selectModels } = require('./model-pricing');
 const {
     ACTIVITIES,
@@ -489,6 +491,9 @@ function activate(context) {
     context.subscriptions.push(registerModelLearningTools(context));
     context.subscriptions.push(registerSkillProcedureTool(context));
     context.subscriptions.push(registerPriorAssessmentStoreTool(context));
+    context.subscriptions.push(registerEvidenceBatchTool(context));
+    context.subscriptions.push(registerEvidenceReadTool());
+    context.subscriptions.push(vscode.commands.registerCommand('agentRoster.openEvidenceDashboard', () => openEvidenceDashboard(context)));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.openModelLearning', () => openModelLearning(context)));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.openModelInventory', scope => openModelInventory(context, scope)));
     context.subscriptions.push(vscode.commands.registerCommand('agentRoster.changeModelScope', () => changeModelScope(context)));
@@ -1052,6 +1057,143 @@ function getLearningHtml(webview, extensionUri) {
 </html>`;
 }
 
+// Evidence batches live only in the open workspace folder. Writes are gated by VS Code's confirmation prompt,
+// which runs before invoke; a rejected prompt never reaches the write.
+function openWorkspaceFolder() {
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    evidenceStore.resolveWriteTarget(folders.map(folder => folder.uri.fsPath));
+    return folders[0];
+}
+
+function workspaceEvidenceAdapter(rootUri) {
+    const uriFor = segments => vscode.Uri.joinPath(rootUri, ...segments);
+    return {
+        async readText(segments) {
+            try {
+                return Buffer.from(await vscode.workspace.fs.readFile(uriFor(segments))).toString('utf8');
+            } catch (error) {
+                if (error?.code === 'FileNotFound') return null;
+                throw error;
+            }
+        },
+        async writeNew(segments, text) {
+            const directory = segments.slice(0, -1);
+            await vscode.workspace.fs.createDirectory(uriFor(directory));
+            const temp = [...directory, `.${segments.at(-1)}.${randomBytes(6).toString('hex')}.tmp`];
+            await vscode.workspace.fs.writeFile(uriFor(temp), Buffer.from(text, 'utf8'));
+            try {
+                await vscode.workspace.fs.rename(uriFor(temp), uriFor(segments), { overwrite: false });
+            } catch (error) {
+                await vscode.workspace.fs.delete(uriFor(temp), { useTrash: false }).catch(() => { });
+                if (error?.code === 'FileExists') {
+                    const exists = new Error('batch file already exists');
+                    exists.code = 'EXISTS';
+                    throw exists;
+                }
+                throw error;
+            }
+        },
+        async list(segments) {
+            try {
+                const entries = await vscode.workspace.fs.readDirectory(uriFor(segments));
+                return entries.map(([name, type]) => ({ name, isDirectory: (type & vscode.FileType.Directory) !== 0 }));
+            } catch (error) {
+                if (error?.code === 'FileNotFound') return [];
+                throw error;
+            }
+        },
+        async modified(segments) {
+            try {
+                return (await vscode.workspace.fs.stat(uriFor(segments))).mtime;
+            } catch (error) {
+                if (error?.code === 'FileNotFound') return null;
+                throw error;
+            }
+        }
+    };
+}
+
+// Read-only viewer: reads the open workspace's evidence store on each open; keeps no project data in any VS Code state.
+const evidenceDashboardPanels = new WeakMap();
+
+async function openEvidenceDashboard(context) {
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    let panel = evidenceDashboardPanels.get(context);
+    if (!panel) {
+        panel = vscode.window.createWebviewPanel('agentRosterEvidenceDashboard', 'Aro Evidence Dashboard', vscode.ViewColumn.One, { enableScripts: false, localResourceRoots: [] });
+        evidenceDashboardPanels.set(context, panel);
+        panel.onDidDispose(() => evidenceDashboardPanels.delete(context));
+    }
+    panel.reveal(vscode.ViewColumn.One);
+    let view;
+    try {
+        view = await evidenceDashboard.buildEvidenceDashboard({
+            adapter: folders.length === 1 ? workspaceEvidenceAdapter(folders[0].uri) : undefined,
+            folders: folders.map(folder => folder.uri.fsPath)
+        });
+    } catch {
+        view = { state: 'READ_FAILED', message: 'Evidence could not be read from the open folder.' };
+    }
+    const nonce = randomBytes(16).toString('base64');
+    panel.webview.html = evidenceDashboard.renderEvidenceDashboardHtml(view, { nonce, cspSource: panel.webview.cspSource });
+}
+
+function registerEvidenceBatchTool(context) {
+    return vscode.lm.registerTool('aro_write_evidence_batch', {
+        async prepareInvocation({ input }) {
+            if (input?.operation === 'status') {
+                return { invocationMessage: 'Reading evidence batch receipts from the open project' };
+            }
+            const folder = openWorkspaceFolder();
+            const records = Array.isArray(input?.batch?.records) ? input.batch.records.length : 'unknown';
+            return {
+                invocationMessage: 'Preparing to write one evidence batch',
+                confirmationMessages: {
+                    title: 'Write evidence batch to the open project?',
+                    message: `Create one evidence batch file (${records} records) for run ${input?.batch?.run_id ?? 'unknown'} under docs/project-assessment/ in workspace folder "${folder.name}". Existing batches are never overwritten.`
+                }
+            };
+        },
+        async invoke({ input }) {
+            const folder = openWorkspaceFolder();
+            const adapter = workspaceEvidenceAdapter(folder.uri);
+            const folders = [folder.uri.fsPath];
+            let result;
+            if (input?.operation === 'status') {
+                result = await evidenceStore.readEvidenceStatus({ adapter, runId: input.runId });
+            } else if (input?.operation === 'write') {
+                result = await evidenceStore.writeEvidenceBatch({ adapter, folders, batch: input.batch, writeAuthorized: true });
+            } else {
+                throw new Error('operation must be write or status.');
+            }
+            return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(JSON.stringify(result))]);
+        }
+    });
+}
+
+// Least-privilege read: no confirmation prompt, no write path, workspace-only adapter, one batch page per call.
+function registerEvidenceReadTool() {
+    return vscode.lm.registerTool('aro_read_evidence_batch_page', {
+        async prepareInvocation({ input }) {
+            return { invocationMessage: `Reading evidence batch ${input?.batchId ?? 'unknown'} page from the open project` };
+        },
+        async invoke({ input }) {
+            const folder = openWorkspaceFolder();
+            const result = await evidenceStore.readBatchPage({
+                adapter: workspaceEvidenceAdapter(folder.uri),
+                folders: [folder.uri.fsPath],
+                runId: input?.runId,
+                sourceKey: input?.sourceKey,
+                batchId: input?.batchId,
+                scopeId: input?.scopeId,
+                cursor: input?.cursor,
+                pageSize: input?.pageSize
+            });
+            return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(JSON.stringify(result))]);
+        }
+    });
+}
+
 function deactivate() { }
 
-module.exports = { activate, deactivate, registerPriorAssessmentStoreTool };
+module.exports = { activate, deactivate, registerPriorAssessmentStoreTool, registerEvidenceBatchTool, registerEvidenceReadTool };

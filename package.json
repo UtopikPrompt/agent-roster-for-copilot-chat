@@ -9,11 +9,14 @@
     "activationEvents": [
         "onCommand:agentRoster.openModelLearning",
         "onCommand:agentRoster.openModelInventory",
+        "onCommand:agentRoster.openEvidenceDashboard",
         "onView:agentRoster.modelLearning",
         "onLanguageModelTool:aroGetModelRecommendations",
         "onLanguageModelTool:aroRecordModelOutcome",
         "onLanguageModelTool:aroGetSkillProcedure",
-        "onLanguageModelTool:aro_read_prior_assessment_store"
+        "onLanguageModelTool:aro_read_prior_assessment_store",
+        "onLanguageModelTool:aro_write_evidence_batch",
+        "onLanguageModelTool:aro_read_evidence_batch_page"
     ],
     "license": "PolyForm-Noncommercial-1.0.0",
     "engines": {
@@ -115,6 +118,10 @@
             {
                 "command": "agentRoster.openModelInventory",
                 "title": "Agent Roster: Open Model Inventory"
+            },
+            {
+                "command": "agentRoster.openEvidenceDashboard",
+                "title": "Agent Roster: Open Evidence Dashboard"
             }
         ],
         "languageModelTools": [
@@ -338,6 +345,91 @@
                     },
                     "required": [
                         "operation"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "aro_write_evidence_batch",
+                "displayName": "Write or read assessment evidence batches",
+                "toolReferenceName": "aro_write_evidence_batch",
+                "canBeReferencedInPrompt": true,
+                "userDescription": "Write one bounded evidence batch to the open project's docs/project-assessment folder after confirmation, or read batch receipts for a run.",
+                "modelDescription": "Use only for a standard project assessment's bounded evidence batches. operation=write stores exactly one batch object (run_id, scope_id, source_key, batch_id, sufficiency COMPLETE|PARTIAL|UNKNOWN|BLOCKED, records[] where each record carries evidence_id and the same batch_id) beneath the open workspace folder's docs/project-assessment/<run_id>/evidence/<source_key>/<batch_id>.json. VS Code asks the user to confirm each write. Re-sending identical content returns already_recorded; different content for an existing batch_id is refused and never overwritten. Returns a small receipt only, never the records. operation=status with runId returns batch receipts and the worst-status run sufficiency; a run is COMPLETE only when every batch is COMPLETE. Never writes outside the open workspace folder, never uses extension storage, and never accepts absolute paths.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "operation": {
+                            "type": "string",
+                            "enum": [
+                                "write",
+                                "status"
+                            ]
+                        },
+                        "runId": {
+                            "type": "string",
+                            "maxLength": 128,
+                            "description": "Status only: the run folder name."
+                        },
+                        "batch": {
+                            "type": "object",
+                            "description": "Write only: one evidence batch object. Must include run_id, scope_id, source_key, batch_id, sufficiency, and records."
+                        }
+                    },
+                    "required": [
+                        "operation"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "aro_read_evidence_batch_page",
+                "displayName": "Read assessment evidence batch page",
+                "toolReferenceName": "aro_read_evidence_batch_page",
+                "canBeReferencedInPrompt": true,
+                "userDescription": "Read one bounded page of normalized records from an evidence batch in the open project's docs/project-assessment folder. Read-only.",
+                "modelDescription": "Read-only. Returns one bounded page of the actual normalized records of one evidence batch, identified by runId, sourceKey, and batchId, plus run/scope/source/batch identity, sufficiency, record_count, cursor, next_cursor, and final_page. Page through a batch by passing next_cursor as cursor until final_page is true; pages keep stored order. Use scopeId to assert the batch belongs to the expected scope. Reads only the open workspace folder's docs/project-assessment/<runId>/evidence/<sourceKey>/<batchId>.json. Malformed batches or records return an error naming the batch and record index; they are never skipped. Never writes, never accepts paths, never reads other batches, and never uses extension storage or source/ADO tools.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "runId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                        },
+                        "sourceKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                        },
+                        "batchId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                        },
+                        "scopeId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "description": "Optional: the batch must belong to this scope or the read is refused."
+                        },
+                        "cursor": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0,
+                            "description": "Zero-based record offset; pass the previous next_cursor."
+                        },
+                        "pageSize": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 50,
+                            "default": 20
+                        }
+                    },
+                    "required": [
+                        "runId",
+                        "sourceKey",
+                        "batchId"
                     ],
                     "additionalProperties": false
                 }

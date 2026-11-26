@@ -115,7 +115,7 @@ One manifest per source batch in a run. Records link to it through `batch_id`. R
 
 | Field | Meaning |
 | --- | --- |
-| `batch_id` | Unique within the run for one source batch. Every record of the batch carries it. |
+| `batch_id` | Unique within the run for one source batch. The collector that owns the batch allocates it; neither Aro nor the user supplies it. Every record of the batch carries it. |
 | `run_id` / `scope_id` / `source` / `adapter` / `collector` | As defined in the Evidence Record |
 | `intended_retrieval_mode` | Mode from the P0 source plan, supplied by Aro. `UNKNOWN` when not supplied. |
 | `actual_retrieval_mode` | Mode used at P2, from the canonical vocabulary below. `UNKNOWN` when the source is BLOCKED or the mode is not confirmed. |
@@ -224,7 +224,7 @@ A continuation page merges into its batch only when `run_id`, `scope_id`, and `b
 
 ### Checkpoint Package
 
-The evidence checkpoint package is the normalized records, batch manifests, coverage registers, sufficiency states, and navigation ledger for one run. It is separate from the progress checkpoint described below and from the P7 final report package. A normal full assessment saves the P7 default package route to the open project. Never overwrite a run directory or package file. Collectors and analysis workers never write it. partial or summary-only collector results only as status/context, not source evidence.
+The evidence checkpoint package is the normalized records, batch manifests, coverage registers, sufficiency states, and navigation ledger for one run. It is separate from the progress checkpoint described below and from the P7 final report package. A normal full assessment saves the P7 default package route to the open project. Never overwrite a run directory or package file. Collectors and analysis workers never write it, with one exception: the Azure DevOps collector writes each completed source batch once as `evidence/azure-devops/<batch-id>.json` beneath the run root through `aro_write_evidence_batch`. The write is workspace-only, confirmed by the user per write, never overwrites, and its receipts never upgrade a PARTIAL batch to COMPLETE. partial or summary-only collector results only as status/context, not source evidence.
 
 ### Progress Checkpoint
 

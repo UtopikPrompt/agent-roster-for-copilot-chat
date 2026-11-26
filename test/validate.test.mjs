@@ -169,7 +169,8 @@ test('Aro resolves procedure gaps and owns persistence for read-only assessment 
     assert.match(text, /retry the affected scope/);
     assert.match(text, /continue independent authorized work/);
     assert.match(text, /consult DocsGovernanceAdvisor and invoke GovDocumentationSuiteGenerator/);
-    assert.match(text, /verify saved paths by read-back/i);
+    assert.match(text, /returns a persistence receipt/i);
+    assert.match(text, /does not re-read the saved files itself/i);
     assert.match(text, /only after the writer route fails or lacks its required tools/i);
     const worker = parseCustomization(await readFile(path.join(root, 'agents/CodeRebuildEngineer.agent.md'), 'utf8'), 'CodeRebuildEngineer');
     assert.deepEqual(worker.metadata.tools, ['read', 'search']);
@@ -370,6 +371,8 @@ test('maintenance and privacy documentation describe the learning runtime', asyn
     assert.match(instructions, /Future edits must preserve Aro's thin-dispatcher purpose/i);
     assert.match(instructions, /do not give Aro domain, read, search, edit, build, collection, or diagnosis duties/i);
     assert.doesNotMatch(instructions, /should not gain activation code/i);
+    assert.match(instructions, /## User Task Authority[\s\S]*source of truth[\s\S]*explicit approval boundaries/);
+    assert.match(instructions, /Do not weaken real policy, tool, or authorization gates/);
 });
 
 test('Aro consults the required domain advisor before every specialist dispatch', async () => {

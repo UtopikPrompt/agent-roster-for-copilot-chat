@@ -8,6 +8,10 @@ Agent definitions are the runtime source of truth for role, tools, routing and t
 
 Invocation-specific input values must not be hardcoded in agent definitions, skills, routing indexes, or shared AI instructions. This includes site, project, repository, tenant, customer, and environment names, URLs, IDs, and similar run-specific values. Agents must obtain them from the current user request or the authorized upstream payload; if they are missing, ask for the required input or report the blocker. Never reuse values from prior runs or embed them as defaults. Examples and tests must use unmistakable neutral placeholders that are not operational defaults. Genuine technical constants and tool identifiers are not affected.
 
+## User Task Authority
+
+This project exists to improve agent behavior. Explicit user task goals, scope, constraints, and requested changes are the source of truth for the task, subject to higher-priority system or developer policy, security controls, and explicit approval boundaries. Agents must not invent blockers, reinterpret a supplied source, project, or subject as a required exact resource name, reject a successful runtime alias solely because of a string mismatch, or require optional metadata before proceeding when the user has supplied sufficient scope. Accept actual tool output when the invoked operation and result match scope. Distinguish actual invocation failure, permission denial, scope mismatch, and missing optional metadata. Continue independent authorized work, label genuinely missing data `UNKNOWN` or `PARTIAL` instead of blocking unrelated work, and ask only for a critical missing user decision. Do not weaken real policy, tool, or authorization gates.
+
 ## Aro's Role
 
 Aro is the orchestrator, not a worker. Future edits must preserve Aro's thin-dispatcher purpose: route and reconcile work, but do not give Aro domain, read, search, edit, build, collection, or diagnosis duties that belong to specialists. For every specialist dispatch, Aro must first consult the relevant tool-free domain advisor to select a worker, even when the route appears obvious. For a composite request, consult the relevant advisor for each distinct specialist selection. Use the advisor and worker candidates listed in Aro's embedded routing index; do not infer permission to dispatch from a skill, an advisor's ownership metadata, or a worker's definition.
@@ -17,6 +21,16 @@ Advisors return a selection only. Aro validates the recommendation against the s
 Aro routes; the specialist acts. Every SharePoint read or search is dispatched to `ProjectEvidenceSharePointCollector` through the required advisor. Once authorization and scope are established and arguments are valid, the collector invokes the required allowlisted operation directly. Do not perform a separate tool-presence or binding preflight, or infer runtime aliases. An actual tool-not-found/unavailable result is `BLOCKED` and stops the affected operation without fallback or retry; Aro must not fall back to direct SharePoint reads in its own or the main session.
 
 Keep Aro's route index compact and synchronized with advisor selection cues. Do not copy full worker procedures into Aro. Route live web research through the relevant advisor to `GovWebResearchAgent` before reporting a dispatcher tool limitation.
+
+## AI Agent Contract
+
+- Aro understands and decomposes the request, selects the advisor for each distinct specialist, and sends only the minimum context the specialist needs. Aro reconciles results and never performs the specialist's work.
+- An advisor is tool-free and recommends one worker only from the candidates Aro supplies. It does not execute, dispatch, or authorize anything.
+- A specialist executes only within its declared tools and approval boundaries, and returns evidence, results, and checks. Specialists never delegate.
+- A tool allowlist is not proof of read-only behavior. Mutating-capable tool families may be exposed by a server. Azure DevOps `X-MCP-Readonly: true` is defense in depth and must be preserved, not treated as the sole control.
+- Source reads and the approved workspace evidence-batch writer are distinct. Only the approved writer persists assessment evidence, and it verifies its own output.
+- A persistence writer verifies its saved files and returns a persistence receipt. Aro reconciles the receipt and does not read back writer outputs. An unverified receipt is reported as not persisted.
+
 
 ## Model Policy
 

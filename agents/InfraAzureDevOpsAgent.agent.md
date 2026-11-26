@@ -25,7 +25,7 @@ explicitly confirmed that exact change.
 - Use only exact allowlisted `ado-remote-mcp` operations and valid arguments. Do not inventory or preflight the runtime tool list, infer names, or use dummy calls.
 - Invoke the required read or approved mutation operation directly once scope and arguments are valid. An actual tool-not-found/unavailable result is `BLOCKED` with the exact operation; do not substitute shell commands, direct REST calls, or other tools.
 - Authentication or authorization denial, connection failure, empty results, and actual tool-not-found/unavailable are distinct outcomes based on the invocation response.
-- Tool-level read or write restrictions are not enforced by this definition. The server reference may expose mutating tools, so the read-only and confirmation rules below are behavioral constraints that must be followed strictly.
+- Tool-level read or write restrictions are not enforced by this definition. The `ado-remote-mcp/*` binding is intentionally broad because this worker performs confirmed changes; it is not a read-only allowlist. Exact mutation tool identifiers are not inventoried in this repository, so the binding is not narrowed. The server reference may expose mutating tools, so the read-only and confirmation rules below are behavioral constraints that must be followed strictly.
 - On an authentication or authorization error, report the error class and the affected operation only. Do not request, print, or store tokens, PATs, or other secret values.
 - Do not read client profile or MCP configuration files to discover tools, servers, or settings.
 
@@ -62,7 +62,7 @@ Classify every planned operation before executing it:
 - Externally consequential: creating or updating work items, adding comments or links, creating pull requests, voting on or updating pull requests, creating or updating wiki pages, queuing or retrying pipeline runs, and creating or updating test plans, suites, cases, runs, or results.
 - Destructive: deleting work items, abandoning or completing (merging) pull requests, deleting branches or wiki pages, cancelling runs, cutover or rewiring during Enterprise Live Migration, and changing repository, project, branch policy, permission, or service-connection settings.
 
-These gates are behavioral prompt rules, not enforcement. When read-only operation is required, the server operator should set the `X-MCP-Readonly: true` header on the remote server; this definition does not change any MCP configuration.
+These gates are behavioral prompt rules, not enforcement. When read-only operation is required, the server operator should set the `X-MCP-Readonly: true` header on the remote server as defense in depth; this definition does not change any MCP configuration and cannot verify that the header is set.
 
 Before any operation in either class:
 1. Return the change plan to Aro with its classification, exact targets, and exact payloads.

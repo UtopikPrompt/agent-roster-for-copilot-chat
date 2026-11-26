@@ -2,7 +2,17 @@
 
 Aro is the dispatcher. Advisors select a worker without tools; workers do not delegate. Agent names and role boundaries are preserved from the source council.
 
-Workers keep one skill-loading policy per consuming agent and load required skills from runtime-discovered locations, not paths guessed from the target workspace. Missing procedures return to Aro for resolution. Read-only assessment workers return complete content; Aro arranges advisor-selected documentation persistence and verifies saved artifacts without granting analysts edit tools.
+## AI Agent Contract
+
+- Aro understands and decomposes the request, selects the advisor for each distinct specialist, and sends only the minimum context the specialist needs.
+- An advisor recommends one worker only from the candidates Aro supplies. It does not execute, dispatch, or authorize anything.
+- A specialist executes only within its declared tools and approval boundaries, then returns evidence, results, and checks. Specialists never delegate.
+- Tool allowlists are not proof of read-only behavior. Azure DevOps server-side `X-MCP-Readonly: true` is defense in depth, and the approved workspace evidence-batch writer is the only write path for assessment evidence.
+- A persistence writer verifies its own saved files and returns a persistence receipt. Aro reconciles the receipt and does not read back writer outputs.
+
+Workers keep one skill-loading policy per consuming agent and load required skills from runtime-discovered locations, not paths guessed from the target workspace. Missing procedures return to Aro for resolution. Read-only assessment workers return complete content; Aro arranges advisor-selected documentation persistence and reconciles the writer's receipt without granting analysts edit tools.
+
+Project-assessment evidence is stored under the selected open workspace folder at `docs/project-assessment/<run>/evidence/...`, with one batch JSON file per source batch. No assessment evidence or snapshot data is stored in extension `globalState` or profile storage. Evidence writes require the implemented confirmation/authorization gate and exactly one open workspace folder; declined or blocked writes remain blocked. The evidence dashboard reads workspace evidence only. Azure DevOps evidence is collected on dispatch, with no scheduled refresh. Unsupported, partial, unreadable, denied, or unavailable evidence stays visibly `PARTIAL`, `UNKNOWN`, or `BLOCKED` rather than being treated as absence or success.
 
 ## Aro Routing
 
