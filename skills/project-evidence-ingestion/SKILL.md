@@ -173,7 +173,7 @@ Rules:
 
 ## Prior Evidence Reuse and Resume
 
-Reuse applies only to evidence the user explicitly supplies in the request. No earlier run, output folder, or report is searched for or loaded.
+Reuse is the default for a continuation. Unless the user clearly requests a new assessment, compatible prior records, manifests, indexes, and completed analysis in the same output destination (`docs/project-assessment/`) are candidates for reuse after the checks in this section. Only that output tree is searched for prior runs; no source tree is searched for them and no other path is loaded. Prior run data is contextual, never source truth: check freshness, scope and run match, data type, and provenance before reuse. An incompatible or ambiguous prior run is preserved unchanged, and a new run uses a distinct run root.
 
 ### Prior-Report Context
 
@@ -224,16 +224,16 @@ A continuation page merges into its batch only when `run_id`, `scope_id`, and `b
 
 ### Checkpoint Package
 
-The evidence checkpoint package is the normalized records, batch manifests, coverage registers, sufficiency states, and navigation ledger for one run. It is separate from the progress checkpoint described below and from the P7 final report package. A normal full assessment saves the P7 default package route to the open project. Never overwrite a run directory or package file. Collectors and analysis workers never write it, with one exception: the Azure DevOps collector writes each completed source batch once as `evidence/azure-devops/<batch-id>.json` beneath the run root through `aro_write_evidence_batch`. The write is workspace-only, confirmed by the user per write, never overwrites, and its receipts never upgrade a PARTIAL batch to COMPLETE. partial or summary-only collector results only as status/context, not source evidence.
+The evidence checkpoint package is the normalized records, batch manifests, coverage registers, sufficiency states, and navigation ledger for one run. It is separate from the progress checkpoint described below and from the P7 final report package. A normal full assessment saves the P7 default package route to the open project. Never overwrite a run directory or package file. Collectors and analysis workers never write it, with one exception: the Azure DevOps collector writes each completed source batch once beneath the active workspace as `docs/project-assessment/<run-id>/evidence/azure-devops/<batch-id>.json` through `aro_write_evidence_batch`. Standard full assessments authorize this default evidence write; do not ask a separate authorization question or exact file list. No per-batch VS Code prompt is used; the single-folder, workspace-only, and no-overwrite checks are the gates. The write is workspace-only, never overwrites, and its receipts never upgrade a PARTIAL batch to COMPLETE. partial or summary-only collector results only as status/context, not source evidence.
 
 ### Progress Checkpoint
 
 A progress checkpoint records run/scope, source status, batch ids, accepted record refs, completed phase, pending queue, failures/gaps, and next phase. Each run has exactly one progress log, `<run-root>/checkpoints/progress-checkpoint.md`, beneath the exact P0 assessment run root. It has a current-state/resume summary at the top and timestamped entries appended below. Writes require explicit checkpoint save authorization and go through `GovDocumentationSuiteGenerator`. Same-run updates append to that log and replace only the summary; prior entries are never overwritten and no per-stage files are created. Resume continues the existing run root and uses the latest readable checkpoint, reusing valid evidence and analysis outputs and collecting only deltas. Never treat prior reports as evidence. If the writer or authorization is unavailable, report checkpoint not persisted, preserve the checkpoint in chat, and continue analysis.
 
-## Local Repository P1 Root Identity
+## Local Source Gate and P1
 
-- P1 runs before local collection and is scoped only to the exact open target root supplied by Aro. The open project is the destination/root unless the user explicitly names another destination or target.
-- P1 validates only the exact open destination: confirm it is readable and usable and that `read` and `search` are available. A valid empty workspace is not evidence-source identity and must not fail P1.
+- Local repository is a source only when the user explicitly includes it. Local P1 runs only then, before local collection, and is scoped only to the exact source root supplied by the request or an authorized upstream payload. Output-destination status never makes a folder a source. Without explicit inclusion, run no local P1, no local collection, and no reads of the open folder's README or package manifests.
+- P1 validates only the exact supplied source root: confirm it is readable and that `read` and `search` are available. A valid empty root is not evidence-source identity and must not fail P1. Output-destination writes are gated by the writer, not by P1.
 - Use only root-bounded reads/searches. Do not scan, enumerate, or search the whole repository before P1 passes, and do not walk parent or child directories to repair a wrong root.
 - Recognized source identity signals may be collected under P2; they are optional, never P1 prerequisites. Record only observed identity fields and repository-relative locators. Never infer or invent a project/package name, title, version, URL, owner, or repository status.
 - If no source artifacts exist after P2, return `EMPTY` or `PARTIAL` with `UNKNOWN` coverage. Do not report `NEEDS_INPUT` solely for missing repository identity or enter an intake prompt.

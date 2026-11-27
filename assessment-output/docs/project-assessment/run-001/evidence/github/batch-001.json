@@ -1,0 +1,15 @@
+{
+  "schema": "aro.evidence-batch.v1",
+  "run_id": "run-001",
+  "scope_id": "scope-001",
+  "source_key": "github",
+  "batch_id": "batch-001",
+  "sufficiency": "COMPLETE",
+  "record_count": 1,
+  "records": [
+    {
+      "evidence_id": "ev-001",
+      "batch_id": "batch-001"
+    }
+  ]
+}

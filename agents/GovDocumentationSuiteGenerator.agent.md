@@ -169,7 +169,7 @@ When this workflow is relevant, read and follow the bundled [specification-hando
 
 ## Assessment Report Persistence
 
-Use for a project-assessment persistence request dispatched by Aro with the complete report package and a confirmed non-roster target root/write paths. Normal full assessments are already authorized to save to the open project; only an explicit don't-save/chat-only override or an explicitly different destination changes that route.
+Use for a project-assessment persistence request dispatched by Aro with the complete report package and a confirmed non-roster target root/write paths. Normal full assessments are already authorized to save to the open workspace output destination; only an explicit don't-save/chat-only override or an explicitly different destination changes that route.
 
 - Refuse a target root that is the agent-roster repository: a root whose `package.json` declares `chatAgents` or `chatSkills`, or that contains the roster's `agents/` and `skills/` directories together with `scripts/validate.mjs`. Report the refusal to Aro and write nothing.
 - Write package content exactly as supplied in its content language. Do not translate, transliterate, or rename files; package filenames keep their stable English names.

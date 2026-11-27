@@ -75,7 +75,7 @@ test('absent or ambiguous workspace blocks the write before any file operation',
     assert.equal(adapter.calls.writeNew, 0);
 });
 
-test('a batch is written only under the run evidence folder for its source', async () => {
+test('default active-workspace allowlist writes the exact run/source/batch JSON path', async () => {
     const adapter = memoryAdapter();
     const receipt = await writeEvidenceBatch({ adapter, ...authorized, batch: batch() });
     assert.equal(receipt.status, 'written');
@@ -197,11 +197,13 @@ test('store module never uses globalState, workspaceState, or extension storage'
     assert.doesNotMatch(source, /globalState|workspaceState|storageUri|globalStorageUri|require\(['"]vscode['"]\)/);
 });
 
-test('extension registers the write tool with a VS Code confirmation gate and workspace-only adapter', async () => {
+test('extension registers the write tool without a per-batch prompt and with a workspace-only adapter', async () => {
     const extension = await readFile(path.join(repoRoot, 'src', 'extension.js'), 'utf8');
     assert.match(extension, /registerTool\('aro_write_evidence_batch'/);
-    assert.match(extension, /confirmationMessages/);
+    assert.doesNotMatch(extension, /confirmationMessages/);
     assert.match(extension, /workspace\.fs/);
+    const writeBlock = extension.slice(extension.indexOf("registerTool('aro_write_evidence_batch'"));
+    assert.match(writeBlock, /openWorkspaceFolder\(\)[\s\S]*writeEvidenceBatch\(/);
     const block = extension.slice(extension.indexOf("registerTool('aro_write_evidence_batch'"));
     assert.doesNotMatch(block.slice(0, 4000), /globalState|workspaceState|globalStorageUri|storageUri/);
 });

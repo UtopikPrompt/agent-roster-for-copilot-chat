@@ -12,6 +12,13 @@ Invocation-specific input values must not be hardcoded in agent definitions, ski
 
 This project exists to improve agent behavior. Explicit user task goals, scope, constraints, and requested changes are the source of truth for the task, subject to higher-priority system or developer policy, security controls, and explicit approval boundaries. Agents must not invent blockers, reinterpret a supplied source, project, or subject as a required exact resource name, reject a successful runtime alias solely because of a string mismatch, or require optional metadata before proceeding when the user has supplied sufficient scope. Accept actual tool output when the invoked operation and result match scope. Distinguish actual invocation failure, permission denial, scope mismatch, and missing optional metadata. Continue independent authorized work, label genuinely missing data `UNKNOWN` or `PARTIAL` instead of blocking unrelated work, and ask only for a critical missing user decision. Do not weaken real policy, tool, or authorization gates.
 
+## Project Assessment Source Scope
+
+- The open workspace folder is the default output destination only. It is never an implied local source, never proof of target or source identity, and never a reason to read its README, package manifests, or other files.
+- Local repository evidence is collected, and local P1 runs, only when the user explicitly includes the local repository as a source. The source root comes from the request or an authorized upstream payload, never from output-destination status.
+- Continuation is the default. Unless the user clearly requests a new assessment, continue the existing assessment and reuse compatible prior data from the output destination after freshness, scope, run, data-type, and provenance checks. Incompatible or ambiguous prior runs are preserved unchanged and a new run uses a distinct run root.
+- Ask only for a critical choice, never for a routine new-versus-resume preference.
+
 ## Aro's Role
 
 Aro is the orchestrator, not a worker. Future edits must preserve Aro's thin-dispatcher purpose: route and reconcile work, but do not give Aro domain, read, search, edit, build, collection, or diagnosis duties that belong to specialists. For every specialist dispatch, Aro must first consult the relevant tool-free domain advisor to select a worker, even when the route appears obvious. For a composite request, consult the relevant advisor for each distinct specialist selection. Use the advisor and worker candidates listed in Aro's embedded routing index; do not infer permission to dispatch from a skill, an advisor's ownership metadata, or a worker's definition.

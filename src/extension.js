@@ -1057,8 +1057,7 @@ function getLearningHtml(webview, extensionUri) {
 </html>`;
 }
 
-// Evidence batches live only in the open workspace folder. Writes are gated by VS Code's confirmation prompt,
-// which runs before invoke; a rejected prompt never reaches the write.
+// Evidence batches live only in the single open workspace folder; invoke enforces it before any write.
 function openWorkspaceFolder() {
     const folders = vscode.workspace.workspaceFolders ?? [];
     evidenceStore.resolveWriteTarget(folders.map(folder => folder.uri.fsPath));
@@ -1141,17 +1140,10 @@ async function openEvidenceDashboard(context) {
 function registerEvidenceBatchTool(context) {
     return vscode.lm.registerTool('aro_write_evidence_batch', {
         async prepareInvocation({ input }) {
-            if (input?.operation === 'status') {
-                return { invocationMessage: 'Reading evidence batch receipts from the open project' };
-            }
-            const folder = openWorkspaceFolder();
-            const records = Array.isArray(input?.batch?.records) ? input.batch.records.length : 'unknown';
             return {
-                invocationMessage: 'Preparing to write one evidence batch',
-                confirmationMessages: {
-                    title: 'Write evidence batch to the open project?',
-                    message: `Create one evidence batch file (${records} records) for run ${input?.batch?.run_id ?? 'unknown'} under docs/project-assessment/ in workspace folder "${folder.name}". Existing batches are never overwritten.`
-                }
+                invocationMessage: input?.operation === 'status'
+                    ? 'Reading evidence batch receipts from the open project'
+                    : 'Writing one evidence batch to the open project'
             };
         },
         async invoke({ input }) {
