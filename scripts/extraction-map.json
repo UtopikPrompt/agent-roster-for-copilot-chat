@@ -131,5 +131,16 @@
       "InfraTestInfrastructureGenerator",
       "MultiLanguageBuilder"
     ]
+  },
+  {
+    "skill": "project-assessment",
+    "source": "Aro",
+    "sections": [
+      "Project Assessment Coordination"
+    ],
+    "agents": [
+      "Aro",
+      "ProjectAssessmentExpert"
+    ]
   }
 ]

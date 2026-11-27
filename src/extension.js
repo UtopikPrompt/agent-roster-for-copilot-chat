@@ -581,7 +581,7 @@ function registerModelLearningTools(context) {
 }
 
 // Hardcoded allowlist: the tool takes only a name from this list, never a path, so input cannot traverse the filesystem.
-const BUNDLED_SKILLS = Object.freeze(['project-evidence-ingestion', 'project-assessment']);
+const BUNDLED_SKILLS = Object.freeze(['project-assessment']);
 
 // The host spills large tool results to a file the caller cannot read, so each call returns one bounded part.
 const SKILL_PART_MAX_CHARS = 4000;
