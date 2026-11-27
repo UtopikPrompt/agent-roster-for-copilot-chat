@@ -139,7 +139,6 @@
       "Project Assessment Coordination"
     ],
     "agents": [
-      "Aro",
       "ProjectAssessmentExpert"
     ]
   }
