@@ -1,8 +1,15 @@
 # Agent Catalog
 
-Aro is the dispatcher. Advisors select a worker without tools; workers do not delegate. Agent names and role boundaries are preserved from the source council.
+Aro is the dispatcher. Advisors select a worker without tools; workers do not delegate. Agent definitions live in `agents/`.
 
-Workers keep one skill-loading policy per consuming agent and load required skills from runtime-discovered locations, not paths guessed from the target workspace. Missing procedures return to Aro for resolution. Read-only assessment workers return complete content; Aro arranges advisor-selected documentation persistence and verifies saved artifacts without granting analysts edit tools.
+## AI Agent Contract
+
+- Aro understands and decomposes the request, selects the advisor for each distinct specialist, and sends only the minimum context the specialist needs.
+- An advisor recommends one worker only from the candidates Aro supplies. It does not execute, dispatch, or authorize anything.
+- A specialist executes only within its declared tools and approval boundaries, then returns evidence, results, and checks. Specialists never delegate.
+- A persistence writer verifies its own saved files and returns a persistence receipt. Aro reconciles the receipt and does not read back writer outputs.
+
+Workers keep one skill-loading policy per consuming agent and load required skills from runtime-discovered locations, not paths guessed from the target workspace. Missing procedures return to Aro for resolution. Read-only assessment workers return complete content; Aro arranges advisor-selected documentation persistence and reconciles the writer receipt, reporting confirmed status and paths without reading back outputs or granting analysts edit tools.
 
 ## Aro Routing
 
@@ -105,12 +112,7 @@ Before each advisor and specialist call, Aro consults the profile-local learning
 | [InfraSecurityAuthAgent](../agents/InfraSecurityAuthAgent.agent.md) | Provider-neutral authentication, authorization, RBAC, secrets and trust design. Use for GitHub App/OIDC, AWS IAM/Cognito, Azure identity, application authorization, or Kubernetes Secret delivery; diagnose the evidenced boundary without automatic permission expansion. |
 | [InfraTestInfrastructureGenerator](../agents/InfraTestInfrastructureGenerator.agent.md) | Generate test suites, fixtures, mocks, coverage and testing-specific CI gates; run scoped tests only when execution is authorized. Failing-job diagnosis and deployment stages remain with their dedicated workers. |
 | [MultiLanguageBuilder](../agents/MultiLanguageBuilder.agent.md) | Handles polyglot builds across Python/Node.js/TypeScript with polyglot package management (pip/pnpm/yarn). Manages workspace isolation, version pinning, and cross-language dependency resolution. |
-| [ProjectAssessmentAdvisor](../agents/ProjectAssessmentAdvisor.agent.md) | Selects one read-only evidence collector by source family, or the cross-source analysis worker, for a project assessment. Returns a decision only. |
-| [ProjectAssessmentExpert](../agents/ProjectAssessmentExpert.agent.md) | Analyzes supplied evidence records across documentation, code, architecture, requirements, and delivery practice, keeping conflicts and gaps visible. Tool-free: analyzes only the supplied evidence records. No writes. |
-| [ProjectEvidenceAzureDevOpsCollector](../agents/ProjectEvidenceAzureDevOpsCollector.agent.md) | Collects read-only Azure DevOps evidence for projects, teams, and code, wiki, work item, or commit search. No tools are bound until debug verifies exact names and read-only enforcement; grouped categories are BLOCKED pending debug. Distinct from InfraAzureDevOpsAgent, which is read and write. |
-| [ProjectEvidenceGitHubCollector](../agents/ProjectEvidenceGitHubCollector.agent.md) | Collects read-only GitHub code scanning alerts for a project assessment. No tools are bound until debug verifies the runtime names; Actions, Projects, automation, repository, commit, issue, and PR tools are BLOCKED pending debug. Secret scanning is excluded. |
-| [ProjectEvidenceLocalRepoCollector](../agents/ProjectEvidenceLocalRepoCollector.agent.md) | Collects local target-repository evidence using read and search only. Branch, commit, and dirty status stay unknown unless evidenced. |
-| [ProjectEvidenceM365Collector](../agents/ProjectEvidenceM365Collector.agent.md) | Teams, Planner, and OneDrive evidence collector with no tools bound. BLOCKED until distinct read tools are debug-bound and preauthorized. Reports authorization failures as blocked. |
-| [ProjectEvidenceSharePointCollector](../agents/ProjectEvidenceSharePointCollector.agent.md) | Collects read-only SharePoint documents, libraries, lists, and site metadata. No tools are bound: four WorkIQ read tools are PENDING. BLOCKED until the binding and preauthorization are debug-verified. Reports authorization failures as blocked. |
+| [ProjectAssessmentAdvisor](../agents/ProjectAssessmentAdvisor.agent.md) | Selects the general cross-material analysis worker for a subject assessment. Returns a decision only. |
+| [ProjectAssessmentExpert](../agents/ProjectAssessmentExpert.agent.md) | Analyzes supplied evidence across health/readiness, technical quality, architecture, requirements alignment, and relevant operating or delivery concerns. Tool-free: analyzes only supplied evidence. No writes. |
 | [Aro](../agents/Aro.agent.md) | Orchestrator for advisor-led specialist selection, scoped dispatch, model selection, sequencing, and result synthesis. Never acts as the worker. |
 | [UtilityAdvisor](../agents/UtilityAdvisor.agent.md) | Utility specialist-selection advisor for agent diagnostics, divergent brainstorming, and checkpoint summaries. Returns a decision only. |

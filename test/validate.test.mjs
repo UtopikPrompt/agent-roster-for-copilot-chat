@@ -28,7 +28,7 @@ test('resolves portable assets without permitting package traversal', () => {
 });
 
 test('validates the complete council and all extracted workflow consumers', async () => {
-    assert.deepEqual(await validate(), { agents: 57, skills: 12 });
+    assert.deepEqual(await validate(), { agents: 52, skills: 11 });
 });
 
 test('Azure DevOps agent is a read-first, non-delegating worker routed through InfraDevOpsAdvisor', async () => {
@@ -78,15 +78,13 @@ test('Azure DevOps agent is a read-first, non-delegating worker routed through I
 
     const aro = parseCustomization(await readFile(path.join(root, 'agents/Aro.agent.md'), 'utf8'), 'Aro');
     assert.ok(aro.metadata.agents.includes(name));
-    assert.match(aro.body, /\| Azure DevOps operations or changes \(work items, Azure Repos or pull requests, pipelines, wiki\) through the Azure DevOps MCP; not project assessment evidence \| InfraAzureDevOpsAgent \| InfraDevOpsAdvisor \|/);
+    assert.match(aro.body, /\| Azure DevOps operations or changes \(work items, Azure Repos or pull requests, pipelines, wiki\) through the Azure DevOps MCP \| InfraAzureDevOpsAgent \| InfraDevOpsAdvisor \|/);
 
     const advisor = await readFile(path.join(root, 'agents/InfraDevOpsAdvisor.agent.md'), 'utf8');
     assert.match(advisor, /Azure DevOps work items.*-> `InfraAzureDevOpsAgent`/);
 
     const docs = await readFile(path.join(root, 'docs/agents.md'), 'utf8');
     assert.match(docs, /\[InfraAzureDevOpsAgent\]\(\.\.\/agents\/InfraAzureDevOpsAgent\.agent\.md\)/);
-    const readme = await readFile(path.join(root, 'README.md'), 'utf8');
-    assert.match(readme, /\[InfraAzureDevOpsAgent\]\(agents\/InfraAzureDevOpsAgent\.agent\.md\)/);
 });
 
 test('GovWebResearchAgent fetches supplied URLs with web/fetch independent of SearXNG', async () => {
@@ -168,7 +166,7 @@ test('Aro resolves procedure gaps and owns persistence for read-only assessment 
 async function fixture(context) {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'agent-roster-'));
     context.after(() => rm(directory, { recursive: true, force: true }));
-    for (const folder of ['agents', 'skills/sample', 'docs']) {
+    for (const folder of ['agents', 'skills/sample', 'docs', 'scripts']) {
         await mkdir(path.join(directory, folder), { recursive: true });
     }
     const manifest = {
@@ -178,7 +176,7 @@ async function fixture(context) {
         }
     };
     await writeFile(path.join(directory, 'package.json'), JSON.stringify(manifest));
-    await writeFile(path.join(directory, 'docs/extraction-map.json'), '[]');
+    await writeFile(path.join(directory, 'scripts/extraction-map.json'), '[]');
     await writeFile(path.join(directory, 'agents/Aro.agent.md'), '---\nname: Aro\ndescription: Dispatch\ntools: [agent]\nagents: [ExampleAdvisor]\n---\nRoute to ExampleAdvisor.\n');
     await writeFile(path.join(directory, 'agents/ExampleAdvisor.agent.md'), '---\nname: ExampleAdvisor\ndescription: Select\ntools: []\n---\nChoose a worker.\n');
     await writeFile(path.join(directory, 'skills/sample/SKILL.md'), '---\nname: sample\ndescription: Use for tests\n---\nRun a test.\n');
@@ -197,7 +195,7 @@ test('rejects broken bundled skill links', async context => {
 
 test('requires agent-level discovery and recovery guidance for extracted skills', async context => {
     const directory = await fixture(context);
-    await writeFile(path.join(directory, 'docs/extraction-map.json'), JSON.stringify([
+    await writeFile(path.join(directory, 'scripts/extraction-map.json'), JSON.stringify([
         { skill: 'sample', agents: ['Aro'], sections: [] }
     ]));
     const filename = path.join(directory, 'agents/Aro.agent.md');
@@ -248,7 +246,7 @@ test('rejects a stale dispatcher allowlist', async context => {
 
 test('rejects references to skills missing from the extraction registry', async context => {
     const directory = await fixture(context);
-    await writeFile(path.join(directory, 'docs/extraction-map.json'), '[{"skill":"missing","agents":["ExampleAdvisor"],"sections":[]}]');
+    await writeFile(path.join(directory, 'scripts/extraction-map.json'), '[{"skill":"missing","agents":["ExampleAdvisor"],"sections":[]}]');
     await assert.rejects(validate(directory), /Unregistered extracted skill/);
 });
 
@@ -342,7 +340,7 @@ test('Aro model learning is automatic, persistent, and has no manual benchmark U
 });
 
 test('maintenance and privacy documentation describe the learning runtime', async () => {
-    const maintenance = await readFile(path.join(root, 'docs/maintenance.md'), 'utf8');
+    const maintenance = await readFile(path.join(root, 'CONTRIBUTING.md'), 'utf8');
     const readme = await readFile(path.join(root, 'README.md'), 'utf8');
     const instructions = await readFile(path.join(root, '.github/copilot-instructions.md'), 'utf8');
     assert.match(maintenance, /extension-host entry point is `src\/extension\.js`/);
@@ -405,7 +403,7 @@ test('advisor scopes and shared skill consumers stay aligned', async () => {
     const builder = parseCustomization(await readFile(path.join(root, 'agents/MultiLanguageBuilder.agent.md'), 'utf8'), 'MultiLanguageBuilder');
     assert.doesNotMatch(builder.body, /go-contract-validation/);
 
-    const extractions = JSON.parse(await readFile(path.join(root, 'docs/extraction-map.json'), 'utf8'));
+    const extractions = JSON.parse(await readFile(path.join(root, 'scripts/extraction-map.json'), 'utf8'));
     assert.ok(extractions.find(entry => entry.skill === 'frontend-experience-quality').agents.includes('CodeDesignSystemSpecialist'));
     assert.deepEqual(extractions.find(entry => entry.skill === 'go-contract-validation').agents, ['CodeGeneralist']);
 });
@@ -606,7 +604,7 @@ async function loadSkillProcedureTools() {
     return tools;
 }
 
-test('bundled skill procedure tool is contributed with a two-name schema and no path input', async () => {
+test('bundled skill procedure tool is contributed with a single-name schema and no path input', async () => {
     const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
     assert.ok(manifest.activationEvents.includes('onLanguageModelTool:aroGetSkillProcedure'));
     const tool = manifest.contributes.languageModelTools.find(entry => entry.name === 'aroGetSkillProcedure');
@@ -615,7 +613,7 @@ test('bundled skill procedure tool is contributed with a two-name schema and no 
     assert.deepEqual(tool.inputSchema, {
         type: 'object',
         properties: {
-            skill: { type: 'string', enum: ['project-evidence-ingestion', 'project-assessment'] },
+            skill: { type: 'string', enum: ['project-assessment'] },
             part: { type: 'integer', minimum: 1 }
         },
         required: ['skill'],
@@ -630,7 +628,7 @@ test('bundled skill procedure tool is contributed with a two-name schema and no 
 
 test('bundled skill procedure tool returns bounded parts that reassemble each allowlisted skill verbatim', async () => {
     const tool = (await loadSkillProcedureTools()).get('aroGetSkillProcedure');
-    for (const skill of ['project-evidence-ingestion', 'project-assessment']) {
+    for (const skill of ['project-assessment']) {
         const expected = await readFile(path.join(root, 'skills', skill, 'SKILL.md'), 'utf8');
         let assembled = '';
         let total = 1;
@@ -651,7 +649,7 @@ test('bundled skill procedure tool returns bounded parts that reassemble each al
 test('bundled skill procedure tool rejects out-of-range or non-integer parts', async () => {
     const tool = (await loadSkillProcedureTools()).get('aroGetSkillProcedure');
     for (const part of [0, -1, 1.5, '1', 999]) {
-        await assert.rejects(tool.invoke({ input: { skill: 'project-evidence-ingestion', part } }), /Invalid part/, String(part));
+        await assert.rejects(tool.invoke({ input: { skill: 'project-assessment', part } }), /Invalid part/, String(part));
     }
 });
 
@@ -659,7 +657,7 @@ test('bundled skill procedure tool rejects names outside the allowlist and path-
     const tool = (await loadSkillProcedureTools()).get('aroGetSkillProcedure');
     const rejected = [
         undefined, {}, { skill: '' }, { skill: 'project-assessment ' }, { skill: 'Project-Assessment' },
-        { skill: 'project-evidence-ingestion/../project-assessment' }, { skill: '../../package.json' },
+        { skill: 'project-evidence-ingestion' }, { skill: '../../package.json' },
         { skill: '..\\..\\package.json' }, { skill: 'skills/project-assessment/SKILL.md' },
         { skill: path.join(root, 'package.json') }, { skill: 'constructor' }, { skill: '__proto__' },
         { skill: ['project-assessment'] }, { skill: 'AroGetSkillProcedure' }

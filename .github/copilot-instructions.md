@@ -6,13 +6,26 @@ This repository packages a curated agent roster and reusable workflow skills as 
 
 Agent definitions are the runtime source of truth for role, tools, routing and task behavior. Skills hold reusable procedures shared by multiple agents. The roster originated as user-level prompts, but the packaged extension must remain self-contained and generic. Never require runtime access to a personal prompt folder or include personal paths, identities, or source-project details.
 
+Invocation-specific input values must not be hardcoded in agent definitions, skills, routing indexes, or shared AI instructions. Agents must obtain them from the current user request or an authorized upstream payload; if they are missing, ask for the required input or report the blocker. Never reuse values from prior runs or embed them as defaults. Examples and tests must use unmistakable neutral placeholders that are not operational defaults. Genuine technical constants and tool identifiers are not affected.
+
+## User Task Authority
+
+Explicit user task goals, scope, constraints, and requested changes are the source of truth for the task, subject to higher-priority system or developer policy, security controls, and explicit approval boundaries. Agents must not invent blockers, reinterpret supplied values as required resource names, or require optional metadata before proceeding when the user has supplied sufficient scope. Accept actual tool output when the invoked operation and result match scope. Distinguish invocation failure, permission denial, scope mismatch, and missing optional metadata. Continue independent authorized work, label genuinely missing data `UNKNOWN` or `PARTIAL`, and ask only for a critical missing user decision.
+
 ## Aro's Role
 
-Aro is the orchestrator, not a worker. For every specialist dispatch, Aro must first consult the relevant tool-free domain advisor to select a worker, even when the route appears obvious. For a composite request, consult the relevant advisor for each distinct specialist selection. Use the advisor and worker candidates listed in Aro's embedded routing index; do not infer permission to dispatch from a skill, an advisor's ownership metadata, or a worker's definition.
+Aro is the orchestrator, not a worker. Future edits must preserve Aro's thin-dispatcher purpose: route and reconcile work, but do not give Aro domain, read, search, edit, build, collection, or diagnosis duties that belong to specialists. For every specialist dispatch, Aro must first consult the relevant tool-free domain advisor to select a worker, even when the route appears obvious. For a composite request, consult the relevant advisor for each distinct specialist selection. Use the advisor and worker candidates listed in Aro's embedded routing index; do not infer permission to dispatch from a skill, an advisor's ownership metadata, or a worker's definition.
 
 Advisors return a selection only. Aro validates the recommendation against the supplied candidates and its `agents` allowlist, then invokes the worker itself and reconciles the result. Advisors and workers never delegate. Preserve approval, tool, and read-only boundaries. An advisor `NO_MATCH` is not authorization to bypass advisor selection; correct the candidate scope and consult the appropriate advisor, or ask for clarification if no valid route is established.
 
 Keep Aro's route index compact and synchronized with advisor selection cues. Do not copy full worker procedures into Aro. Route live web research through the relevant advisor to `GovWebResearchAgent` before reporting a dispatcher tool limitation.
+
+## AI Agent Contract
+
+- Aro understands and decomposes the request, selects the advisor for each distinct specialist, and sends only the minimum context the specialist needs. Aro reconciles results and never performs the specialist's work.
+- An advisor is tool-free and recommends one worker only from the candidates Aro supplies. It does not execute, dispatch, or authorize anything.
+- A specialist executes only within its declared tools and approval boundaries and returns evidence, results, and checks. Specialists never delegate.
+- A persistence writer verifies its saved files and returns a persistence receipt. Aro reconciles the receipt and does not read back writer outputs. An unverified receipt is reported as not persisted.
 
 ## Model Policy
 
@@ -26,7 +39,7 @@ For an agent change, check and update all affected surfaces:
 
 - Agent name, filename, YAML metadata, tool restrictions, and intentional model preference.
 - Aro's allowlist and routing index, plus the relevant advisor's selection cues.
-- Existing skills, their agent links, registrations in `package.json`, and `docs/extraction-map.json` when consumers or extracted procedures change.
+- Existing skills, their agent links, registrations in `package.json`, and `scripts/extraction-map.json` when consumers or extracted procedures change.
 - `docs/agents.md`, README or maintenance documentation, and focused regression tests.
 
 Do not create a new agent for a one-off task or duplicate a skill without a clear ownership reason. Preserve the single-dispatcher architecture, tool-free advisors, and non-delegating workers.

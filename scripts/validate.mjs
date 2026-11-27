@@ -95,7 +95,7 @@ export async function validate(base = root) {
     const expected = agents.filter(agent => agent !== dispatcher).map(agent => agent.metadata.name).sort();
     assert.deepEqual([...dispatcher.metadata.agents].sort(), expected, 'Dispatcher allowlist must match roster');
     for (const name of expected) assert.ok(dispatcher.body.includes(name), `Missing routing cue: ${name}`);
-    const extractions = JSON.parse(await readFile(path.join(base, 'docs', 'extraction-map.json'), 'utf8'));
+    const extractions = JSON.parse(await readFile(path.join(base, 'scripts', 'extraction-map.json'), 'utf8'));
     for (const extraction of extractions) {
         assert.ok(skillNames.has(extraction.skill), `Unregistered extracted skill: ${extraction.skill}`);
         assert.ok(extraction.agents.length > 0, `Unused extracted skill: ${extraction.skill}`);
